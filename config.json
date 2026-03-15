@@ -1,0 +1,23 @@
+{
+    "data_folder": "C:\\Users\\dp1622\\Desktop\\data\\multi_modal_sentiment",
+    "features_target_length": 500,
+    "model_save_path": "C:\\Users\\dp1622\\Desktop\\data\\multi_modal_sentiment\\outputs\\best_model.pt",
+    "plots_save_path": "C:\\Users\\dp1622\\Desktop\\data\\multi_modal_sentiment\\outputs\\",
+    "audio_dim": 74,
+    "vision_dim": 713,
+    "text_dim": 768,
+    "seq_len": 500,
+    "max_text_len": 128,
+    "d_model": 128,
+    "n_heads": 4,
+    "enc_layers": 2,
+    "fuse_layers": 2,
+    "dropout": 0.1,
+    "batch_size": 16,
+    "num_epochs": 3,
+    "learning_rate": 0.0001,
+    "weight_decay": 0.01,
+    "train_ratio": 0.8,
+    "val_ratio": 0.1,
+    "seed": 42
+}
