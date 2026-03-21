@@ -68,6 +68,10 @@ def train(model, train_loader, val_loader, cfg) -> dict:
     Saves best model checkpoint to config['model_save_path'].
     Returns history dict for plotting.
     """
+
+    PATIENCE    = 5      # stop if no improvement for 5 epochs
+    no_improve  = 0
+
     model = model.to(device)
 
     optimizer = optim.AdamW(
@@ -115,10 +119,23 @@ def train(model, train_loader, val_loader, cfg) -> dict:
             f'Val Loss: {val_loss:.4f}  MAE: {val_mae:.4f}  Corr: {val_corr:.4f}'
         )
 
+        # if val_mae < best_val_mae:
+        #     best_val_mae = val_mae
+        #     torch.save(model.state_dict(), save_path)
+        #     print(f'  ✅ Best model saved  (Val MAE = {best_val_mae:.4f})')
+
         if val_mae < best_val_mae:
             best_val_mae = val_mae
+            no_improve   = 0
             torch.save(model.state_dict(), save_path)
-            print(f'  ✅ Best model saved  (Val MAE = {best_val_mae:.4f})')
+            print(f'  ✅ Best model saved (Val MAE = {best_val_mae:.4f})')
+        else:
+            no_improve += 1
+            print(f'  No improvement for {no_improve}/{PATIENCE} epochs')
+
+            if no_improve >= PATIENCE:
+                print(f'\n🛑 Early stopping at epoch {epoch+1}')
+                break
 
     print('\nTraining complete!')
     return history
