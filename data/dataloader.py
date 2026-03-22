@@ -107,26 +107,28 @@ def get_dataloaders(cfg):
     val_dataset   = MOSEIDataset(hdf5_path, val_idx,   tokenizer, cfg)
     test_dataset  = MOSEIDataset(hdf5_path, test_idx,  tokenizer, cfg)
 
+    pin = torch.cuda.is_available()
+
     train_loader = DataLoader(
         train_dataset,
         batch_size  = cfg['batch_size'],
         shuffle     = True,
         num_workers = 2,
-        pin_memory  = True
+        pin_memory  = pin
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size  = cfg['batch_size'],
         shuffle     = False,
         num_workers = 2,
-        pin_memory  = True
+        pin_memory  = pin
     )
     test_loader = DataLoader(
         test_dataset,
         batch_size  = cfg['batch_size'],
         shuffle     = False,
         num_workers = 2,
-        pin_memory  = True
+        pin_memory  = pin
     )
 
     return train_loader, val_loader, test_loader

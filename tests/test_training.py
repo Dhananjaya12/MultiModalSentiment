@@ -6,13 +6,13 @@ import numpy as np
 from model.model import TransformerFusionModel
 
 @pytest.fixture(scope="function")   # fresh model for EACH training test
-def untrained_model(device):
+def untrained_model(device, cfg):
     """
     Fresh untrained model for training tests.
     Cannot share with other tests because training modifies weights.
     scope="function" means a new one per test — intentional here.
     """
-    model = TransformerFusionModel().to(device)
+    model = TransformerFusionModel(cfg).to(device)
     model.train()
     return model
 

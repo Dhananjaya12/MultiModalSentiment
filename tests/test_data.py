@@ -9,7 +9,7 @@ class TestHDF5File:
 
     def test_file_exists(self, cfg):
         """HDF5 file must exist at the configured path."""
-        path = Path(cfg['hdf5_path'])
+        path = Path(cfg['data_folder']) / "mosei_dataset.h5"
         assert path.exists(), \
             f"HDF5 file not found at {path}"
 

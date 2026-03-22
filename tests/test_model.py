@@ -138,7 +138,7 @@ class TestSavedModel:
         if not path.exists():
             pytest.skip("No saved model found — skipping")
 
-        model = TransformerFusionModel()
+        model = TransformerFusionModel(cfg)
         model.load_state_dict(torch.load(path, map_location=device))
         assert model is not None
 

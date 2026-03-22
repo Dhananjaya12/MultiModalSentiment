@@ -5,15 +5,15 @@ import h5py
 import json
 from pathlib import Path
 from transformers import DistilBertTokenizer
-
-from config.config_loader import load_config
 from model.model import TransformerFusionModel
 
 
 @pytest.fixture(scope="session")
 def cfg():
     """Load config once for all tests."""
-    return load_config()
+    with open("config.json") as f:
+        cfg = json.load(f)
+    return cfg
 
 
 @pytest.fixture(scope="session")
@@ -34,7 +34,7 @@ def model(cfg, device):
     Load the trained model once for all tests.
     Uses the saved best_model.pt.
     """
-    m = TransformerFusionModel()
+    m = TransformerFusionModel(cfg)
     model_path = Path(cfg['model_save_path'])
 
     if model_path.exists():
@@ -86,7 +86,7 @@ def hdf5_sample(cfg):
     Loads first 10 samples from real HDF5 file.
     Used for data quality tests.
     """
-    with h5py.File(cfg['hdf5_path'], 'r') as f:
+    with h5py.File(Path(cfg['data_folder']) / "mosei_dataset.h5", 'r') as f:
         return {
             'audio':  f['audio'][:10],    # (10, 500, 74)
             'vision': f['vision'][:10],   # (10, 500, 713)
@@ -102,11 +102,11 @@ def test_loader(cfg):
     scope="session" so it doesn't reload for every test.
     """
     from data.dataloader import get_dataloaders
-    _, _, test_loader = get_dataloaders()
+    _, _, test_loader = get_dataloaders(cfg)
     return test_loader
 
 @pytest.fixture(scope="session")
 def train_loader(cfg):
     from data.dataloader import get_dataloaders
-    train_loader, _, _ = get_dataloaders()
+    train_loader, _, _ = get_dataloaders(cfg)
     return train_loader
