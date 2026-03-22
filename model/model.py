@@ -64,8 +64,14 @@ class TransformerFusionModel(nn.Module):
 
         # Text backbone — frozen (we don't retrain DistilBERT)
         self.distilbert = DistilBertModel.from_pretrained('distilbert-base-uncased')
-        for param in self.distilbert.parameters():
-            param.requires_grad = False
+        # for param in self.distilbert.parameters():
+        #     param.requires_grad = False
+
+        for name, param in self.distilbert.named_parameters():
+            if 'transformer.layer.4' in name or 'transformer.layer.5' in name:
+                param.requires_grad = True    # unfreeze last 2 layers
+            else:
+                param.requires_grad = False   # freeze everything else
 
         # Stage 1: per-modality encoders
         self.audio_encoder  = ModalityEncoder(self.cfg['audio_dim'], self.cfg)

@@ -8,13 +8,26 @@ from pathlib import Path
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def sentiment_loss(preds: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-    """
-    MAE + 0.5 × MSE — standard loss for MOSEI regression.
-    MAE keeps training stable, MSE penalises big mistakes harder.
-    """
-    return nn.L1Loss()(preds, targets) + 0.5 * nn.MSELoss()(preds, targets)
+# def sentiment_loss(preds: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+#     """
+#     MAE + 0.5 × MSE — standard loss for MOSEI regression.
+#     MAE keeps training stable, MSE penalises big mistakes harder.
+#     """
+#     return nn.L1Loss()(preds, targets) + 0.5 * nn.MSELoss()(preds, targets)
 
+def sentiment_loss(preds, targets):
+    mae  = nn.L1Loss()(preds, targets)
+    mse  = nn.MSELoss()(preds, targets)
+
+    # Pearson correlation loss
+    preds_c   = preds   - preds.mean()
+    targets_c = targets - targets.mean()
+    corr_loss = -(
+        (preds_c * targets_c).mean() /
+        (preds.std() * targets.std() + 1e-8)
+    )
+
+    return mae + 0.5 * mse + 0.3 * corr_loss
 
 def run_one_epoch(model, loader, optimizer=None, is_train: bool = True):
     """
@@ -74,11 +87,21 @@ def train(model, train_loader, val_loader, cfg) -> dict:
 
     model = model.to(device)
 
-    optimizer = optim.AdamW(
-        model.parameters(),
-        lr           = cfg['learning_rate'],
-        weight_decay = cfg['weight_decay']
-    )
+    # optimizer = optim.AdamW(
+    #     model.parameters(),
+    #     lr           = cfg['learning_rate'],
+    #     weight_decay = cfg['weight_decay']
+    # )
+
+    optimizer = optim.AdamW([
+    {'params': model.distilbert.parameters(),     'lr': 1e-5},  # tiny for BERT
+    {'params': model.audio_encoder.parameters(),  'lr': cfg['learning_rate']},
+    {'params': model.vision_encoder.parameters(), 'lr': cfg['learning_rate']},
+    {'params': model.text_encoder.parameters(),   'lr': cfg['learning_rate']},
+    {'params': model.fusion.parameters(),         'lr': cfg['learning_rate']},
+    {'params': model.regressor.parameters(),      'lr': cfg['learning_rate']},
+], weight_decay=cfg['weight_decay'])
+    
     # Learning rate gently decreases to ~0 over training
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=cfg['num_epochs']
