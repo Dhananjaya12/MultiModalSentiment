@@ -4,6 +4,7 @@ from scipy.stats import pearsonr
 from sklearn.metrics import accuracy_score, f1_score
 from pathlib import Path
 from training.trainer import run_one_epoch
+import mlflow
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -47,6 +48,16 @@ def evaluate(model, test_loader, cfg) -> dict:
         'preds':  test_preds,
         'labels': test_labels,
     }
+
+    # ── Log test metrics to the SAME MLflow run ───────────────────
+    with mlflow.start_run(run_name="evaluation", nested=True):
+        mlflow.log_metrics({
+            "test_mae":  test_mae,
+            "test_corr": test_corr,
+            "test_acc2": bin_acc,
+            "test_f1":   bin_f1,
+            "test_acc7": acc7,
+        })
 
     # Print results
     print('═' * 52)

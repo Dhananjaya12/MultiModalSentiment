@@ -4,6 +4,25 @@ import torch.optim as optim
 import numpy as np
 from scipy.stats import pearsonr
 from pathlib import Path
+import mlflow
+import mlflow.pytorch
+
+import subprocess
+
+def get_dvc_data_version():
+    """Returns the MD5 hash of current data version."""
+    try:
+        result = subprocess.run(
+            ['dvc', 'status', 'data/mosei_dataset.h5.dvc'],
+            capture_output=True, text=True
+        )
+        # Read hash from .dvc file
+        with open('data/mosei_dataset.h5.dvc') as f:
+            import yaml
+            dvc_info = yaml.safe_load(f)
+            return dvc_info['outs'][0]['md5']
+    except:
+        return "unknown"
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -82,10 +101,55 @@ def train(model, train_loader, val_loader, cfg) -> dict:
     Returns history dict for plotting.
     """
 
-    PATIENCE    = 5      # stop if no improvement for 5 epochs
-    no_improve  = 0
+    mlflow.set_experiment("mosei-multimodal-sentiment")
 
-    model = model.to(device)
+    with mlflow.start_run(run_name=f"transformer_fusion"):
+
+        # ── Log all config as parameters ─────────────────────────
+        # This records exactly what settings produced this result
+        mlflow.log_params({
+            "data_version": get_dvc_data_version(), 
+            "audio_dim":      cfg['audio_dim'],
+            "vision_dim":     cfg['vision_dim'],
+            "d_model":        cfg['d_model'],
+            "n_heads":        cfg['n_heads'],
+            "enc_layers":     cfg['enc_layers'],
+            "fuse_layers":    cfg['fuse_layers'],
+            "dropout":        cfg['dropout'],
+            "batch_size":     cfg['batch_size'],
+            "learning_rate":  cfg['learning_rate'],
+            "weight_decay":   cfg['weight_decay'],
+            "num_epochs":     cfg['num_epochs'],
+            "seq_len":        cfg['seq_len'],
+        })
+
+        optimizer = optim.AdamW([
+            {'params': model.distilbert.parameters(),     'lr': 1e-5},
+            {'params': model.audio_encoder.parameters(),  'lr': cfg['learning_rate']},
+            {'params': model.vision_encoder.parameters(), 'lr': cfg['learning_rate']},
+            {'params': model.text_encoder.parameters(),   'lr': cfg['learning_rate']},
+            {'params': model.fusion.parameters(),         'lr': cfg['learning_rate']},
+            {'params': model.regressor.parameters(),      'lr': cfg['learning_rate']},
+        ], weight_decay=cfg['weight_decay'])
+
+        scheduler  = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=cfg['num_epochs']
+        )
+
+        save_path    = Path(cfg['model_save_path'])
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        best_val_mae = float('inf')
+        history      = {
+            'train_loss': [], 'train_mae': [],
+            'val_loss':   [], 'val_mae':   [], 'val_corr': []
+        }
+        PATIENCE   = 5
+        no_improve = 0
+
+    # PATIENCE    = 5      # stop if no improvement for 5 epochs
+    # no_improve  = 0
+
+        model = model.to(device)
 
     # optimizer = optim.AdamW(
     #     model.parameters(),
@@ -93,72 +157,95 @@ def train(model, train_loader, val_loader, cfg) -> dict:
     #     weight_decay = cfg['weight_decay']
     # )
 
-    optimizer = optim.AdamW([
-    {'params': model.distilbert.parameters(),     'lr': 1e-5},  # tiny for BERT
-    {'params': model.audio_encoder.parameters(),  'lr': cfg['learning_rate']},
-    {'params': model.vision_encoder.parameters(), 'lr': cfg['learning_rate']},
-    {'params': model.text_encoder.parameters(),   'lr': cfg['learning_rate']},
-    {'params': model.fusion.parameters(),         'lr': cfg['learning_rate']},
-    {'params': model.regressor.parameters(),      'lr': cfg['learning_rate']},
-], weight_decay=cfg['weight_decay'])
+#     optimizer = optim.AdamW([
+#     {'params': model.distilbert.parameters(),     'lr': 1e-5},  # tiny for BERT
+#     {'params': model.audio_encoder.parameters(),  'lr': cfg['learning_rate']},
+#     {'params': model.vision_encoder.parameters(), 'lr': cfg['learning_rate']},
+#     {'params': model.text_encoder.parameters(),   'lr': cfg['learning_rate']},
+#     {'params': model.fusion.parameters(),         'lr': cfg['learning_rate']},
+#     {'params': model.regressor.parameters(),      'lr': cfg['learning_rate']},
+# ], weight_decay=cfg['weight_decay'])
     
-    # Learning rate gently decreases to ~0 over training
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=cfg['num_epochs']
-    )
+#     # Learning rate gently decreases to ~0 over training
+#     scheduler = optim.lr_scheduler.CosineAnnealingLR(
+#         optimizer, T_max=cfg['num_epochs']
+#     )
 
-    save_path = Path(cfg['model_save_path'])
-    save_path.parent.mkdir(parents=True, exist_ok=True)
+#     save_path = Path(cfg['model_save_path'])
+#     save_path.parent.mkdir(parents=True, exist_ok=True)
 
-    history = {
-        'train_loss': [], 'train_mae': [],
-        'val_loss':   [], 'val_mae':   [], 'val_corr': []
-    }
-    best_val_mae = float('inf')
+#     history = {
+#         'train_loss': [], 'train_mae': [],
+#         'val_loss':   [], 'val_mae':   [], 'val_corr': []
+#     }
+#     best_val_mae = float('inf')
 
-    print(f'Training on: {device}')
-    print(f'Epochs: {cfg["num_epochs"]}  |  Batch size: {cfg["batch_size"]}\n')
+#     print(f'Training on: {device}')
+#     print(f'Epochs: {cfg["num_epochs"]}  |  Batch size: {cfg["batch_size"]}\n')
 
-    for epoch in range(cfg['num_epochs']):
+        for epoch in range(cfg['num_epochs']):
 
-        train_loss, train_mae, _, _ = run_one_epoch(
-            model, train_loader, optimizer, is_train=True
+            train_loss, train_mae, _, _ = run_one_epoch(
+                model, train_loader, optimizer, is_train=True
+            )
+            val_loss, val_mae, val_preds, val_labels = run_one_epoch(
+                model, val_loader, is_train=False
+            )
+            val_corr = pearsonr(val_preds, val_labels)[0]
+            scheduler.step()
+
+            history['train_loss'].append(train_loss)
+            history['train_mae'].append(train_mae)
+            history['val_loss'].append(val_loss)
+            history['val_mae'].append(val_mae)
+            history['val_corr'].append(val_corr)
+
+            print(
+                f'Epoch {epoch+1:02d}/{cfg["num_epochs"]}  |  '
+                f'Train Loss: {train_loss:.4f}  MAE: {train_mae:.4f}  |  '
+                f'Val Loss: {val_loss:.4f}  MAE: {val_mae:.4f}  Corr: {val_corr:.4f}'
+            )
+
+            # if val_mae < best_val_mae:
+            #     best_val_mae = val_mae
+            #     torch.save(model.state_dict(), save_path)
+            #     print(f'  ✅ Best model saved  (Val MAE = {best_val_mae:.4f})')
+
+            if val_mae < best_val_mae:
+                best_val_mae = val_mae
+                no_improve   = 0
+                torch.save(model.state_dict(), save_path)
+                print(f'  ✅ Best model saved (Val MAE = {best_val_mae:.4f})')
+            else:
+                no_improve += 1
+                print(f'  No improvement for {no_improve}/{PATIENCE} epochs')
+
+                if no_improve >= PATIENCE:
+                    print(f'\n🛑 Early stopping at epoch {epoch+1}')
+                    break
+       
+        # ── After training: log final metrics ────────────────────
+        mlflow.log_metrics({
+            "best_val_mae":  best_val_mae,
+            "best_val_corr": max(history['val_corr']),
+        })
+
+        # ── Log the best model file as an artifact ────────────────
+        # Artifact = any file you want to save alongside the run
+        mlflow.log_artifact(str(save_path))        # saves best_model.pt
+        mlflow.log_artifact("config/config.json")  # saves config used
+
+        # ── Register model in MLflow Model Registry ───────────────
+        # This gives the model a version number and lifecycle stage
+        mlflow.pytorch.log_model(
+            pytorch_model = model,
+            artifact_path = "model",
+            registered_model_name = "mosei-sentiment-transformer"
         )
-        val_loss, val_mae, val_preds, val_labels = run_one_epoch(
-            model, val_loader, is_train=False
-        )
-        val_corr = pearsonr(val_preds, val_labels)[0]
-        scheduler.step()
 
-        history['train_loss'].append(train_loss)
-        history['train_mae'].append(train_mae)
-        history['val_loss'].append(val_loss)
-        history['val_mae'].append(val_mae)
-        history['val_corr'].append(val_corr)
-
-        print(
-            f'Epoch {epoch+1:02d}/{cfg["num_epochs"]}  |  '
-            f'Train Loss: {train_loss:.4f}  MAE: {train_mae:.4f}  |  '
-            f'Val Loss: {val_loss:.4f}  MAE: {val_mae:.4f}  Corr: {val_corr:.4f}'
-        )
-
-        # if val_mae < best_val_mae:
-        #     best_val_mae = val_mae
-        #     torch.save(model.state_dict(), save_path)
-        #     print(f'  ✅ Best model saved  (Val MAE = {best_val_mae:.4f})')
-
-        if val_mae < best_val_mae:
-            best_val_mae = val_mae
-            no_improve   = 0
-            torch.save(model.state_dict(), save_path)
-            print(f'  ✅ Best model saved (Val MAE = {best_val_mae:.4f})')
-        else:
-            no_improve += 1
-            print(f'  No improvement for {no_improve}/{PATIENCE} epochs')
-
-            if no_improve >= PATIENCE:
-                print(f'\n🛑 Early stopping at epoch {epoch+1}')
-                break
+        print(f'\n✅ MLflow run complete')
+        print(f'   Best Val MAE : {best_val_mae:.4f}')
+        print(f'   Best Val Corr: {max(history["val_corr"]):.4f}')
 
     print('\nTraining complete!')
     return history

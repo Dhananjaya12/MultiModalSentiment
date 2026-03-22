@@ -1,0 +1,6 @@
+[core]
+    remote = myremote
+['remote "myremote"']
+    url = gdrive://1FeEhy13yShFSDCZf5BZZNKXudwM5L5Xz
+    gdrive_use_service_account = true
+    gdrive_service_account_json_file_path = ../data/multimodal-sentiment-491018-1f4e98b30d99.json
