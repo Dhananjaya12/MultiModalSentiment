@@ -40,7 +40,7 @@ jobs:
     # Real config has local paths that don't exist on GitHub's machine
     - name: Create CI config
       run: |
-        cat > config/config.json << 'EOF'
+        cat > config.json << 'EOF'
         {
             "hdf5_path":         "tests/fixtures/test_data.h5",
             "model_save_path":   "tests/fixtures/best_model.pt",
