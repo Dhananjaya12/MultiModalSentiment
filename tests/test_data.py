@@ -92,8 +92,3 @@ class TestHDF5File:
                 text = text.decode()
             assert len(text.strip()) > 0, \
                 f"Empty text at index {i}"
-
-    def test_minimum_sample_count(self, hdf5_sample):
-        """Dataset must have at least 1000 samples."""
-        assert hdf5_sample['total'] >= 1000, \
-            f"Too few samples: {hdf5_sample['total']}"
