@@ -29,7 +29,11 @@ print(f"✅ Fake HDF5 created: {N} samples")
 # ── Create fake saved model ───────────────────────────────────────
 print("Creating fake model checkpoint...")
 from model.model import TransformerFusionModel
+import json
 
-model = TransformerFusionModel()
+with open("config.json") as f:
+    cfg = json.load(f)
+
+model = TransformerFusionModel(cfg)
 torch.save(model.state_dict(), "tests/fixtures/best_model.pt")
 print("✅ Fake model checkpoint created")
