@@ -42,7 +42,7 @@ jobs:
       run: |
         cat > config.json << 'EOF'
         {
-            "hdf5_path":         "tests/fixtures/test_data.h5",
+            "data_folder": "tests/fixtures",
             "model_save_path":   "tests/fixtures/best_model.pt",
             "plots_save_path":   "tests/fixtures/",
             "audio_dim":         74,

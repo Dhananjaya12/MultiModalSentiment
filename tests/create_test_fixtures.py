@@ -15,7 +15,7 @@ Path("tests/fixtures").mkdir(exist_ok=True)
 print("Creating fake HDF5...")
 N = 20   # just 20 samples — enough to test shapes and logic
 
-with h5py.File("tests/fixtures/test_data.h5", "w") as f:
+with h5py.File("tests/fixtures/mosei_dataset.h5", "w") as f:
     f.create_dataset("audio",  data=np.random.randn(N, 500, 74).astype(np.float32))
     f.create_dataset("vision", data=np.random.randn(N, 500, 713).astype(np.float32))
     f.create_dataset("labels", data=np.random.uniform(-3, 3, N).astype(np.float32))
