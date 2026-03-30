@@ -68,7 +68,7 @@ jobs:
     # Step 6: Create small fake HDF5 for CI
     # Can't use your real 10GB file on GitHub
     - name: Create test fixtures
-      run: python tests/create_test_fixtures.py
+      run: PYTHONPATH=. python tests/create_test_fixtures.py
 
     # Step 7: Run tests
     - name: Run pytest
