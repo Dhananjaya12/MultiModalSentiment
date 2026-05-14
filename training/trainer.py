@@ -124,7 +124,8 @@ def train(model, train_loader, val_loader, cfg) -> dict:
         })
 
         optimizer = optim.AdamW([
-            {'params': model.distilbert.parameters(),     'lr': 1e-5},
+            # {'params': model.distilbert.parameters(),     'lr': 1e-5},
+            {'params': [p for p in model.distilbert.parameters() if p.requires_grad], 'lr': 1e-5},
             {'params': model.audio_encoder.parameters(),  'lr': cfg['learning_rate']},
             {'params': model.vision_encoder.parameters(), 'lr': cfg['learning_rate']},
             {'params': model.text_encoder.parameters(),   'lr': cfg['learning_rate']},
@@ -143,7 +144,7 @@ def train(model, train_loader, val_loader, cfg) -> dict:
             'train_loss': [], 'train_mae': [],
             'val_loss':   [], 'val_mae':   [], 'val_corr': []
         }
-        PATIENCE   = 5
+        PATIENCE   = 8
         no_improve = 0
 
     # PATIENCE    = 5      # stop if no improvement for 5 epochs
@@ -200,6 +201,14 @@ def train(model, train_loader, val_loader, cfg) -> dict:
             history['val_mae'].append(val_mae)
             history['val_corr'].append(val_corr)
 
+            mlflow.log_metrics({
+            "train_loss": train_loss,
+            "train_mae":  train_mae,
+            "val_loss":   val_loss,
+            "val_mae":    val_mae,
+            "val_corr":   val_corr,
+        }, step=epoch)
+
             print(
                 f'Epoch {epoch+1:02d}/{cfg["num_epochs"]}  |  '
                 f'Train Loss: {train_loss:.4f}  MAE: {train_mae:.4f}  |  '
@@ -233,7 +242,7 @@ def train(model, train_loader, val_loader, cfg) -> dict:
         # ── Log the best model file as an artifact ────────────────
         # Artifact = any file you want to save alongside the run
         mlflow.log_artifact(str(save_path))        # saves best_model.pt
-        mlflow.log_artifact("config/config.json")  # saves config used
+        mlflow.log_artifact("config.json")  # saves config used
 
         # ── Register model in MLflow Model Registry ───────────────
         # This gives the model a version number and lifecycle stage

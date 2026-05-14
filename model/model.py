@@ -89,11 +89,11 @@ class TransformerFusionModel(nn.Module):
                 audio: torch.Tensor, vision: torch.Tensor) -> torch.Tensor:
 
         # ── Get text token embeddings from DistilBERT ────────
-        with torch.no_grad():
-            bert_out = self.distilbert(
-                input_ids      = input_ids,
-                attention_mask = attention_mask
-            )
+        # with torch.no_grad():
+        bert_out = self.distilbert(
+            input_ids      = input_ids,
+            attention_mask = attention_mask
+        )
         text_raw  = bert_out.last_hidden_state  # (batch, 128, 768)
         text_mask = (attention_mask == 0)        # True = padding token
 
