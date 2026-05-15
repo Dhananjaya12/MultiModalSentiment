@@ -41,19 +41,15 @@ def sentiment_loss(logits, targets, class_weights=None):
     # Primary: weighted cross entropy over 27 classes
     ce_loss = nn.CrossEntropyLoss(weight=class_weights)(logits, targets)
 
-    # Secondary: MAE on predicted vs true float values (for monitoring)
-    pred_idx    = logits.argmax(dim=-1)
-    pred_floats = torch.tensor(
-        [idx_to_label(i.item()) for i in pred_idx],
-        dtype=torch.float, device=logits.device
-    )
-    true_floats = torch.tensor(
-        [idx_to_label(i.item()) for i in targets],
-        dtype=torch.float, device=logits.device
-    )
-    mae_loss = nn.L1Loss()(pred_floats, true_floats)
+    # Ordinal penalty: soft expected value forces model to predict
+    # classes CLOSE to true value, directly optimizing MAE
+    class_range  = torch.arange(27, device=logits.device).float()
+    probs        = torch.softmax(logits, dim=-1)       # (batch, 27)
+    expected_idx = (probs * class_range).sum(dim=-1)   # (batch,)
+    targets_f    = targets.float()                     # (batch,)
+    ordinal_loss = nn.L1Loss()(expected_idx, targets_f)
 
-    return ce_loss + 0.3 * mae_loss
+    return ce_loss + 0.5 * ordinal_loss
 
 def run_one_epoch(model, loader, optimizer=None, is_train=True, class_weights=None):
     """
