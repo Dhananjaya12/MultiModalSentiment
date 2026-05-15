@@ -278,7 +278,13 @@ def train(model, train_loader, val_loader, cfg) -> dict:
         # ── Log the best model file as an artifact ────────────────
         # Artifact = any file you want to save alongside the run
         mlflow.log_artifact(str(save_path))        # saves best_model.pt
-        mlflow.log_artifact("config/config.json")  # saves config used
+        # mlflow.log_artifact("config/config.json")  # saves config used
+
+        import json
+        config_save_path = "/kaggle/working/config.json"
+        with open(config_save_path, "w") as f:
+            json.dump(cfg, f, indent=4)
+        mlflow.log_artifact(config_save_path)
 
         # ── Register model in MLflow Model Registry ───────────────
         # This gives the model a version number and lifecycle stage
