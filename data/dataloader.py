@@ -6,6 +6,22 @@ from transformers import DistilBertTokenizer
 from sklearn.model_selection import train_test_split
 from pathlib import Path
 
+import numpy as np
+
+LABEL_VALUES = np.array([
+    -3., -2.6666667, -2.3333333, -2., -1.6666666, -1.3333334,
+    -1., -0.6666667, -0.5, -0.33333334, -0.16666667, 0.,
+    0.16666667, 0.33333334, 0.5, 0.6666667, 0.8333333, 1.,
+    1.1666666, 1.3333334, 1.5, 1.6666666, 1.8333334, 2.,
+    2.3333333, 2.6666667, 3.
+], dtype=np.float32)
+
+def label_to_idx(label):
+    return int(np.argmin(np.abs(LABEL_VALUES - label)))
+
+def idx_to_label(idx):
+    return float(LABEL_VALUES[idx])
+
 
 # ─────────────────────────────────────────────────────────────────
 # Dataset Class
@@ -45,7 +61,8 @@ class MOSEIDataset(Dataset):
         vision = torch.tensor(f['vision'][real_idx], dtype=torch.float)  # (500, 713)
         audio  = (audio  - audio.mean())  / (audio.std()  + 1e-8)
         vision = (vision - vision.mean()) / (vision.std() + 1e-8)
-        label  = torch.tensor(f['labels'][real_idx], dtype=torch.float)  # scalar
+        # label  = torch.tensor(f['labels'][real_idx], dtype=torch.float)  # scalar
+        label  = torch.tensor(label_to_idx(f['labels'][real_idx]), dtype=torch.long)
         text   = f['texts'][real_idx]
 
         if isinstance(text, bytes):

@@ -9,6 +9,7 @@ import mlflow.pytorch
 
 import subprocess
 import math
+from data.dataloader import LABEL_VALUES, idx_to_label
 
 def get_dvc_data_version():
     """Returns the MD5 hash of current data version."""
@@ -35,21 +36,26 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #     """
 #     return nn.L1Loss()(preds, targets) + 0.5 * nn.MSELoss()(preds, targets)
 
-def sentiment_loss(preds, targets):
-    mae  = nn.L1Loss()(preds, targets)
-    mse  = nn.MSELoss()(preds, targets)
+# REPLACE entire sentiment_loss function:
+def sentiment_loss(logits, targets, class_weights=None):
+    # Primary: weighted cross entropy over 27 classes
+    ce_loss = nn.CrossEntropyLoss(weight=class_weights)(logits, targets)
 
-    # Pearson correlation loss
-    preds_c   = preds   - preds.mean()
-    targets_c = targets - targets.mean()
-    corr_loss = -(
-        (preds_c * targets_c).mean() /
-        (preds.std() * targets.std() + 1e-8)
+    # Secondary: MAE on predicted vs true float values (for monitoring)
+    pred_idx    = logits.argmax(dim=-1)
+    pred_floats = torch.tensor(
+        [idx_to_label(i.item()) for i in pred_idx],
+        dtype=torch.float, device=logits.device
     )
+    true_floats = torch.tensor(
+        [idx_to_label(i.item()) for i in targets],
+        dtype=torch.float, device=logits.device
+    )
+    mae_loss = nn.L1Loss()(pred_floats, true_floats)
 
-    return mae + 0.5 * mse + 0.3 * corr_loss
+    return ce_loss + 0.3 * mae_loss
 
-def run_one_epoch(model, loader, optimizer=None, is_train: bool = True):
+def run_one_epoch(model, loader, optimizer=None, is_train=True, class_weights=None):
     """
     One full pass over the dataset.
 
@@ -74,7 +80,8 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True):
             labels         = batch['label'].to(device)
 
             preds = model(input_ids, attention_mask, audio, vision)
-            loss  = sentiment_loss(preds, labels)
+            # loss  = sentiment_loss(preds, labels)
+            loss  = sentiment_loss(preds, labels, class_weights if is_train else None)
 
             if is_train:
                 optimizer.zero_grad()
@@ -84,13 +91,16 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True):
                 optimizer.step()
 
             total_loss += loss.item() * len(labels)
-            all_preds.extend(preds.detach().cpu().numpy())
+            # all_preds.extend(preds.detach().cpu().numpy())
+            all_preds.extend(preds.argmax(dim=-1).detach().cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
 
     avg_loss = total_loss / len(loader.dataset)
-    preds_np  = np.array(all_preds)
-    labels_np = np.array(all_labels)
-    mae       = np.mean(np.abs(preds_np - labels_np))
+    preds_np  = np.array(all_preds)   # class indices
+    labels_np = np.array(all_labels)  # class indices
+    pred_floats  = np.array([idx_to_label(i) for i in preds_np])
+    label_floats = np.array([idx_to_label(i) for i in labels_np])
+    mae = np.mean(np.abs(pred_floats - label_floats))
 
     return avg_loss, mae, preds_np, labels_np
 
@@ -123,6 +133,15 @@ def train(model, train_loader, val_loader, cfg) -> dict:
             "num_epochs":     cfg['num_epochs'],
             "seq_len":        cfg['seq_len'],
         })
+
+        # ── Class weights for imbalanced 27-class labels ──────────
+        label_counts = np.zeros(27)
+        for batch in train_loader:
+            for lbl in batch['label'].numpy():
+                label_counts[lbl] += 1
+        class_weights = 1.0 / (label_counts + 1e-8)
+        class_weights = class_weights / class_weights.sum() * 27
+        class_weights = torch.tensor(class_weights, dtype=torch.float).to(device)
 
         optimizer = optim.AdamW([
             # {'params': model.distilbert.parameters(),     'lr': 1e-5},
@@ -192,13 +211,24 @@ def train(model, train_loader, val_loader, cfg) -> dict:
 
         for epoch in range(cfg['num_epochs']):
 
+            # train_loss, train_mae, _, _ = run_one_epoch(
+            #     model, train_loader, optimizer, is_train=True
+            # )
+            # val_loss, val_mae, val_preds, val_labels = run_one_epoch(
+            #     model, val_loader, is_train=False
+            # )
+
             train_loss, train_mae, _, _ = run_one_epoch(
-                model, train_loader, optimizer, is_train=True
+                model, train_loader, optimizer, is_train=True, class_weights=class_weights
             )
             val_loss, val_mae, val_preds, val_labels = run_one_epoch(
                 model, val_loader, is_train=False
             )
-            val_corr = pearsonr(val_preds, val_labels)[0]
+
+            # val_corr = pearsonr(val_preds, val_labels)[0]
+            val_pred_floats  = np.array([idx_to_label(i) for i in val_preds])
+            val_label_floats = np.array([idx_to_label(i) for i in val_labels])
+            val_corr = pearsonr(val_pred_floats, val_label_floats)[0]
             scheduler.step()
 
             history['train_loss'].append(train_loss)
