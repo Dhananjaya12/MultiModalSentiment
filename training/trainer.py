@@ -8,6 +8,7 @@ import mlflow
 import mlflow.pytorch
 
 import subprocess
+import math
 
 def get_dvc_data_version():
     """Returns the MD5 hash of current data version."""
@@ -125,7 +126,7 @@ def train(model, train_loader, val_loader, cfg) -> dict:
 
         optimizer = optim.AdamW([
             # {'params': model.distilbert.parameters(),     'lr': 1e-5},
-            {'params': [p for p in model.distilbert.parameters() if p.requires_grad], 'lr': 1e-5},
+            {'params': [p for p in model.distilbert.parameters() if p.requires_grad], 'lr': 5e-6}
             {'params': model.audio_encoder.parameters(),  'lr': cfg['learning_rate']},
             {'params': model.vision_encoder.parameters(), 'lr': cfg['learning_rate']},
             {'params': model.text_encoder.parameters(),   'lr': cfg['learning_rate']},
@@ -133,9 +134,14 @@ def train(model, train_loader, val_loader, cfg) -> dict:
             {'params': model.regressor.parameters(),      'lr': cfg['learning_rate']},
         ], weight_decay=cfg['weight_decay'])
 
-        scheduler  = optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=cfg['num_epochs']
-        )
+        def warmup_cosine(epoch):
+            warmup_epochs = 2
+            if epoch < warmup_epochs:
+                return epoch / warmup_epochs
+            progress = (epoch - warmup_epochs) / (cfg['num_epochs'] - warmup_epochs)
+            return 0.5 * (1 + math.cos(math.pi * progress))
+
+        scheduler = optim.lr_scheduler.LambdaLR(optimizer, warmup_cosine)
 
         save_path    = Path(cfg['model_save_path'])
         save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -242,7 +248,7 @@ def train(model, train_loader, val_loader, cfg) -> dict:
         # ── Log the best model file as an artifact ────────────────
         # Artifact = any file you want to save alongside the run
         mlflow.log_artifact(str(save_path))        # saves best_model.pt
-        mlflow.log_artifact("config.json")  # saves config used
+        mlflow.log_artifact("config/config.json")  # saves config used
 
         # ── Register model in MLflow Model Registry ───────────────
         # This gives the model a version number and lifecycle stage

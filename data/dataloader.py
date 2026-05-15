@@ -43,6 +43,8 @@ class MOSEIDataset(Dataset):
         # Load just this one sample — no need to load everything
         audio  = torch.tensor(f['audio'] [real_idx], dtype=torch.float)  # (500, 74)
         vision = torch.tensor(f['vision'][real_idx], dtype=torch.float)  # (500, 713)
+        audio  = (audio  - audio.mean())  / (audio.std()  + 1e-8)
+        vision = (vision - vision.mean()) / (vision.std() + 1e-8)
         label  = torch.tensor(f['labels'][real_idx], dtype=torch.float)  # scalar
         text   = f['texts'][real_idx]
 

@@ -25,13 +25,25 @@ class SentimentRegressor(nn.Module):
         d_model = self.cfg['d_model']
         dropout = self.cfg['dropout']
 
+        # self.regressor = nn.Sequential(
+        #     nn.Linear(d_model * 3, d_model),   # 384 → 128
+        #     nn.ReLU(),
+        #     nn.Dropout(dropout),
+        #     nn.Linear(d_model, d_model // 2),  # 128 → 64
+        #     nn.ReLU(),
+        #     nn.Linear(d_model // 2, 1)         # 64  → 1 score
+        # )
+
         self.regressor = nn.Sequential(
-            nn.Linear(d_model * 3, d_model),   # 384 → 128
+            nn.Linear(d_model * 3, d_model),
+            nn.LayerNorm(d_model),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(d_model, d_model // 2),  # 128 → 64
+            nn.Linear(d_model, d_model // 2),
+            nn.LayerNorm(d_model // 2),
             nn.ReLU(),
-            nn.Linear(d_model // 2, 1)         # 64  → 1 score
+            nn.Dropout(dropout),       # second dropout before final layer
+            nn.Linear(d_model // 2, 1)
         )
 
     def masked_mean(self, x: torch.Tensor, mask=None) -> torch.Tensor:
