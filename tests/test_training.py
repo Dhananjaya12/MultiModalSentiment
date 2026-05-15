@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 from model.model import TransformerFusionModel
+from data.dataloader import label_to_idx, LABEL_VALUES
 
 @pytest.fixture(scope="function")   # fresh model for EACH training test
 def untrained_model(device, cfg):
@@ -28,7 +29,10 @@ class TestTrainingStep:
             sample_batch['audio'],
             sample_batch['vision']
         )
-        loss = nn.L1Loss()(output, sample_batch['label'])
+        labels_idx = torch.tensor(
+            [label_to_idx(l.item()) for l in sample_batch['label']], dtype=torch.long
+        )
+        loss = nn.CrossEntropyLoss()(output, labels_idx)
 
         assert torch.isfinite(loss), \
             f"Loss is not finite: {loss.item()}"
@@ -44,7 +48,10 @@ class TestTrainingStep:
             sample_batch['audio'],
             sample_batch['vision']
         )
-        loss = nn.L1Loss()(output, sample_batch['label'])
+        labels_idx = torch.tensor(
+            [label_to_idx(l.item()) for l in sample_batch['label']], dtype=torch.long
+        )
+        loss = nn.CrossEntropyLoss()(output, labels_idx)
         loss.backward()
 
         # Check at least some gradients are non-zero
@@ -67,7 +74,10 @@ class TestTrainingStep:
             sample_batch['audio'],
             sample_batch['vision']
         )
-        loss_before = nn.L1Loss()(output_before, sample_batch['label'])
+        labels_idx  = torch.tensor(
+            [label_to_idx(l.item()) for l in sample_batch['label']], dtype=torch.long
+        )
+        loss_before = nn.CrossEntropyLoss()(output_before, labels_idx)
 
         # Take one step
         optimizer.zero_grad()
@@ -82,7 +92,7 @@ class TestTrainingStep:
                 sample_batch['audio'],
                 sample_batch['vision']
             )
-        loss_after = nn.L1Loss()(output_after, sample_batch['label'])
+        loss_after = nn.CrossEntropyLoss()(output_after, labels_idx)
 
         assert loss_after < loss_before, \
             f"Loss did not decrease: {loss_before:.4f} → {loss_after:.4f}"
@@ -103,7 +113,10 @@ class TestTrainingStep:
             sample_batch['audio'],
             sample_batch['vision']
         )
-        loss = nn.L1Loss()(output, sample_batch['label'])
+        labels_idx = torch.tensor(
+            [label_to_idx(l.item()) for l in sample_batch['label']], dtype=torch.long
+        )
+        loss = nn.CrossEntropyLoss()(output, labels_idx)
         loss.backward()
         optimizer.step()
 
