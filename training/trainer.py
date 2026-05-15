@@ -145,7 +145,7 @@ def train(model, train_loader, val_loader, cfg) -> dict:
 
         optimizer = optim.AdamW([
             # {'params': model.distilbert.parameters(),     'lr': 1e-5},
-            {'params': [p for p in model.distilbert.parameters() if p.requires_grad], 'lr': 5e-6}
+            {'params': [p for p in model.distilbert.parameters() if p.requires_grad], 'lr': 5e-6},
             {'params': model.audio_encoder.parameters(),  'lr': cfg['learning_rate']},
             {'params': model.vision_encoder.parameters(), 'lr': cfg['learning_rate']},
             {'params': model.text_encoder.parameters(),   'lr': cfg['learning_rate']},
