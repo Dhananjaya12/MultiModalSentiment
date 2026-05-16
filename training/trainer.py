@@ -9,7 +9,20 @@ import mlflow.pytorch
 
 import subprocess
 import math
-from data.dataloader import LABEL_VALUES, idx_to_label
+# from data.dataloader import LABEL_VALUES, idx_to_label
+
+LABEL_VALUES_NP = np.array([
+    -3., -2.6666667, -2.3333333, -2., -1.6666666, -1.3333334,
+    -1., -0.6666667, -0.5, -0.33333334, -0.16666667, 0.,
+    0.16666667, 0.33333334, 0.5, 0.6666667, 0.8333333, 1.,
+    1.1666666, 1.3333334, 1.5, 1.6666666, 1.8333334, 2.,
+    2.3333333, 2.6666667, 3.
+], dtype=np.float32)
+
+def snap_to_valid(preds: np.ndarray) -> np.ndarray:
+    diffs = np.abs(preds[:, None] - LABEL_VALUES_NP[None, :])
+    idx   = diffs.argmin(axis=1)
+    return LABEL_VALUES_NP[idx]
 
 def get_dvc_data_version():
     """Returns the MD5 hash of current data version."""
@@ -37,19 +50,14 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #     return nn.L1Loss()(preds, targets) + 0.5 * nn.MSELoss()(preds, targets)
 
 # REPLACE entire sentiment_loss function:
-def sentiment_loss(logits, targets, class_weights=None):
-    # Primary: weighted cross entropy over 27 classes
-    ce_loss = nn.CrossEntropyLoss(weight=class_weights)(logits, targets)
-
-    # Ordinal penalty: soft expected value forces model to predict
-    # classes CLOSE to true value, directly optimizing MAE
-    class_range  = torch.arange(27, device=logits.device).float()
-    probs        = torch.softmax(logits, dim=-1)       # (batch, 27)
-    expected_idx = (probs * class_range).sum(dim=-1)   # (batch,)
-    targets_f    = targets.float()                     # (batch,)
-    ordinal_loss = nn.L1Loss()(expected_idx, targets_f)
-
-    return ce_loss + 0.5 * ordinal_loss
+def sentiment_loss(preds, targets):
+    mae      = nn.L1Loss()(preds, targets)
+    mse      = nn.MSELoss()(preds, targets)
+    preds_c  = preds   - preds.mean()
+    tgt_c    = targets - targets.mean()
+    corr     = -((preds_c * tgt_c).mean() /
+                 (preds.std() * targets.std() + 1e-8))
+    return mae + 0.5 * mse + 0.3 * corr
 
 def run_one_epoch(model, loader, optimizer=None, is_train=True, class_weights=None):
     """
@@ -87,16 +95,17 @@ def run_one_epoch(model, loader, optimizer=None, is_train=True, class_weights=No
                 optimizer.step()
 
             total_loss += loss.item() * len(labels)
-            # all_preds.extend(preds.detach().cpu().numpy())
-            all_preds.extend(preds.argmax(dim=-1).detach().cpu().numpy())
+            all_preds.extend(preds.detach().cpu().numpy())
+            # all_preds.extend(preds.argmax(dim=-1).detach().cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
 
     avg_loss = total_loss / len(loader.dataset)
     preds_np  = np.array(all_preds)   # class indices
     labels_np = np.array(all_labels)  # class indices
-    pred_floats  = np.array([idx_to_label(i) for i in preds_np])
-    label_floats = np.array([idx_to_label(i) for i in labels_np])
-    mae = np.mean(np.abs(pred_floats - label_floats))
+    mae = np.mean(np.abs(preds_np - labels_np))
+    # pred_floats  = np.array([idx_to_label(i) for i in preds_np])
+    # label_floats = np.array([idx_to_label(i) for i in labels_np])
+    # mae = np.mean(np.abs(pred_floats - label_floats))
 
     return avg_loss, mae, preds_np, labels_np
 
@@ -220,11 +229,14 @@ def train(model, train_loader, val_loader, cfg) -> dict:
             val_loss, val_mae, val_preds, val_labels = run_one_epoch(
                 model, val_loader, is_train=False
             )
+            val_preds_snapped = snap_to_valid(val_preds)
+            val_mae  = np.mean(np.abs(val_preds_snapped - val_labels))
+            val_corr = pearsonr(val_preds_snapped, val_labels)[0]
 
-            # val_corr = pearsonr(val_preds, val_labels)[0]
-            val_pred_floats  = np.array([idx_to_label(i) for i in val_preds])
-            val_label_floats = np.array([idx_to_label(i) for i in val_labels])
-            val_corr = pearsonr(val_pred_floats, val_label_floats)[0]
+            val_corr = pearsonr(val_preds, val_labels)[0]
+            # val_pred_floats  = np.array([idx_to_label(i) for i in val_preds])
+            # val_label_floats = np.array([idx_to_label(i) for i in val_labels])
+            # val_corr = pearsonr(val_pred_floats, val_label_floats)[0]
             scheduler.step()
 
             history['train_loss'].append(train_loss)

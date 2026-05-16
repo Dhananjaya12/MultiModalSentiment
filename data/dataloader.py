@@ -61,8 +61,8 @@ class MOSEIDataset(Dataset):
         vision = torch.tensor(f['vision'][real_idx], dtype=torch.float)  # (500, 713)
         audio  = (audio  - audio.mean())  / (audio.std()  + 1e-8)
         vision = (vision - vision.mean()) / (vision.std() + 1e-8)
-        # label  = torch.tensor(f['labels'][real_idx], dtype=torch.float)  # scalar
-        label  = torch.tensor(label_to_idx(f['labels'][real_idx]), dtype=torch.long)
+        label  = torch.tensor(f['labels'][real_idx], dtype=torch.float)  # scalar
+        # label  = torch.tensor(label_to_idx(f['labels'][real_idx]), dtype=torch.long)
         text   = f['texts'][real_idx]
 
         if isinstance(text, bytes):

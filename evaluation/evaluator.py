@@ -3,10 +3,23 @@ import numpy as np
 from scipy.stats import pearsonr, spearmanr
 from pathlib import Path
 from training.trainer import run_one_epoch
-from data.dataloader import idx_to_label
+# from data.dataloader import idx_to_label
 import mlflow
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+LABEL_VALUES_NP = np.array([
+    -3., -2.6666667, -2.3333333, -2., -1.6666666, -1.3333334,
+    -1., -0.6666667, -0.5, -0.33333334, -0.16666667, 0.,
+    0.16666667, 0.33333334, 0.5, 0.6666667, 0.8333333, 1.,
+    1.1666666, 1.3333334, 1.5, 1.6666666, 1.8333334, 2.,
+    2.3333333, 2.6666667, 3.
+], dtype=np.float32)
+
+def snap_to_valid(preds: np.ndarray) -> np.ndarray:
+    diffs = np.abs(preds[:, None] - LABEL_VALUES_NP[None, :])
+    idx   = diffs.argmin(axis=1)
+    return LABEL_VALUES_NP[idx]
 
 
 def evaluate(model, test_loader, cfg) -> dict:
@@ -24,9 +37,13 @@ def evaluate(model, test_loader, cfg) -> dict:
     _, _, test_preds, test_labels = run_one_epoch(
         model, test_loader, is_train=False
     )
+    test_preds = snap_to_valid(test_preds)
 
-    pred_floats  = np.array([idx_to_label(i) for i in test_preds])
-    label_floats = np.array([idx_to_label(i) for i in test_labels])
+    # pred_floats  = np.array([idx_to_label(i) for i in test_preds])
+    # label_floats = np.array([idx_to_label(i) for i in test_labels])
+
+    pred_floats  = test_preds
+    label_floats = test_labels
 
     # ── Core metrics ──────────────────────────────────────────────
     mae      = np.mean(np.abs(pred_floats - label_floats))

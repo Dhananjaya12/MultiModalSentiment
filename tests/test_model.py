@@ -44,7 +44,7 @@ class TestModelForward:
     """Tests model forward pass."""
 
     def test_output_shape(self, model, sample_batch):
-        """Output must be (batch_size, 27) — logits over 27 classes per sample."""
+        """Output must be (batch_size,) — one float score per sample."""
         with torch.no_grad():
             output = model(
                 sample_batch['input_ids'],
@@ -52,11 +52,11 @@ class TestModelForward:
                 sample_batch['audio'],
                 sample_batch['vision']
             )
-        assert output.shape == (4, 27), \
-            f"Expected output shape (4, 27), got {output.shape}"
+        assert output.shape == (4,), \
+            f"Expected output shape (4,), got {output.shape}"
 
-    def test_output_is_logits_per_sample(self, model, sample_batch):
-        """Each output must be 27 logits — one per sentiment class."""
+    def test_output_is_scalar_per_sample(self, model, sample_batch):
+        """Each output must be a single float — not a vector."""
         with torch.no_grad():
             output = model(
                 sample_batch['input_ids'],
@@ -64,10 +64,13 @@ class TestModelForward:
                 sample_batch['audio'],
                 sample_batch['vision']
             )
-        assert output.ndim == 2, \
-            f"Output should be 2D (batch, 27), got {output.ndim}D"
-        assert output.shape[1] == 27, \
-            f"Output should have 27 classes, got {output.shape[1]}"
+        # assert output.ndim == 2, \
+        #     f"Output should be 2D (batch, 27), got {output.ndim}D"
+        # assert output.shape[1] == 27, \
+        #     f"Output should have 27 classes, got {output.shape[1]}"
+
+        assert output.ndim == 1, \
+            f"Output should be 1D, got {output.ndim}D"
 
     def test_no_nan_in_output(self, model, sample_batch):
         """Model must not produce NaN predictions."""
@@ -156,4 +159,4 @@ class TestSavedModel:
 
         assert not torch.isnan(output).any(), "Saved model produces NaN"
         assert not torch.isinf(output).any(), "Saved model produces Inf"
-        assert output.shape == (4, 27),       "Saved model wrong output shape"
+        assert output.shape == (4,), "Saved model wrong output shape"

@@ -43,7 +43,7 @@ class SentimentRegressor(nn.Module):
             nn.LayerNorm(d_model // 2),
             nn.ReLU(),
             nn.Dropout(dropout),       # second dropout before final layer
-            nn.Linear(d_model // 2, 27)
+            nn.Linear(d_model // 2, 1)
         )
 
     def masked_mean(self, x: torch.Tensor, mask=None) -> torch.Tensor:
@@ -59,8 +59,8 @@ class SentimentRegressor(nn.Module):
         t = self.masked_mean(text,   mask=text_mask)  # (batch, d_model)
 
         fused = torch.cat([a, v, t], dim=-1)          # (batch, d_model*3)
-        # return self.regressor(fused).squeeze(-1)  
-        return self.regressor(fused)       # (batch,)
+        return self.regressor(fused).squeeze(-1)  
+        # return self.regressor(fused)       # (batch,)
 
 
 class TransformerFusionModel(nn.Module):
