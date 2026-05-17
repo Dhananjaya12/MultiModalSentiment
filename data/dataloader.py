@@ -2,7 +2,8 @@ import h5py
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
-from transformers import DistilBertTokenizer
+# from transformers import DistilBertTokenizer
+from transformers import RobertaTokenizer
 from sklearn.model_selection import train_test_split
 from pathlib import Path
 
@@ -120,8 +121,9 @@ def get_dataloaders(cfg):
     print(f"  Val   : {len(val_idx)}   samples")
     print(f"  Test  : {len(test_idx)}  samples")
 
-    tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-
+    # tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+    tokenizer = RobertaTokenizer.from_pretrained('roberta-large')
+    
     train_dataset = MOSEIDataset(hdf5_path, train_idx, tokenizer, cfg)
     val_dataset   = MOSEIDataset(hdf5_path, val_idx,   tokenizer, cfg)
     test_dataset  = MOSEIDataset(hdf5_path, test_idx,  tokenizer, cfg)

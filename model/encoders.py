@@ -48,11 +48,23 @@ class ModalityEncoder(nn.Module):
         num_layers = self.cfg['enc_layers']
         dropout    = self.cfg['dropout']
 
+        # self.projection = nn.Sequential(
+        #     nn.Linear(input_dim, d_model),
+        #     nn.LayerNorm(d_model),
+        #     nn.Dropout(dropout)
+        # )
+
+        mid_dim = max(d_model, input_dim // 2)
         self.projection = nn.Sequential(
-            nn.Linear(input_dim, d_model),
+            nn.Linear(input_dim, mid_dim),
+            nn.LayerNorm(mid_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(mid_dim, d_model),
             nn.LayerNorm(d_model),
             nn.Dropout(dropout)
         )
+        
         self.pos_encoding = PositionalEncoding(d_model, dropout)
 
         encoder_layer = nn.TransformerEncoderLayer(

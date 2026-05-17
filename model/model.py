@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from transformers import DistilBertModel
+# from transformers import DistilBertModel
+from transformers import RobertaModel
 
 from model.encoders import ModalityEncoder
 from model.fusion import CrossModalFusion
@@ -14,9 +15,9 @@ class SentimentRegressor(nn.Module):
     Takes the 3 enriched sequences, averages each over time,
     concatenates, and predicts a single sentiment score (-3 to +3).
 
-    audio  (batch, 500, 128) → avg → (batch, 128) ─┐
-    vision (batch, 500, 128) → avg → (batch, 128) ─┼─► concat (batch, 384) → score
-    text   (batch, 128, 128) → avg → (batch, 128) ─┘
+    audio  (batch, 500, 256) → avg → (batch, 256) ─┐
+    vision (batch, 500, 256) → avg → (batch, 256) ─┼─► concat (batch, 768) → score
+    text   (batch, 128, 256) → avg → (batch, 256) ─┘
     """
     def __init__(self, cfg):
         super().__init__()
@@ -76,15 +77,25 @@ class TransformerFusionModel(nn.Module):
         self.cfg = cfg
 
         # Text backbone — frozen (we don't retrain DistilBERT)
-        self.distilbert = DistilBertModel.from_pretrained('distilbert-base-uncased')
-        # for param in self.distilbert.parameters():
-        #     param.requires_grad = False
+        # self.distilbert = DistilBertModel.from_pretrained('distilbert-base-uncased')
+        # # for param in self.distilbert.parameters():
+        # #     param.requires_grad = False
 
-        for name, param in self.distilbert.named_parameters():
-            if 'transformer.layer.4' in name or 'transformer.layer.5' in name:
-                param.requires_grad = True    # unfreeze last 2 layers
+        # for name, param in self.distilbert.named_parameters():
+        #     if 'transformer.layer.4' in name or 'transformer.layer.5' in name:
+        #         param.requires_grad = True    # unfreeze last 2 layers
+        #     else:
+        #         param.requires_grad = False   # freeze everything else
+
+        # Text backbone — RoBERTa-large
+        self.roberta = RobertaModel.from_pretrained('roberta-large')
+
+        # Freeze all layers except last 2
+        for name, param in self.roberta.named_parameters():
+            if 'encoder.layer.23' in name or 'encoder.layer.22' in name:
+                param.requires_grad = True
             else:
-                param.requires_grad = False   # freeze everything else
+                param.requires_grad = False
 
         # Stage 1: per-modality encoders
         self.audio_encoder  = ModalityEncoder(self.cfg['audio_dim'], self.cfg)
@@ -103,12 +114,19 @@ class TransformerFusionModel(nn.Module):
 
         # ── Get text token embeddings from DistilBERT ────────
         # with torch.no_grad():
-        bert_out = self.distilbert(
+        # bert_out = self.distilbert(
+        #     input_ids      = input_ids,
+        #     attention_mask = attention_mask
+        # )
+        # text_raw  = bert_out.last_hidden_state  # (batch, 128, 768)
+        # text_mask = (attention_mask == 0)        # True = padding token
+
+        roberta_out = self.roberta(
             input_ids      = input_ids,
             attention_mask = attention_mask
         )
-        text_raw  = bert_out.last_hidden_state  # (batch, 128, 768)
-        text_mask = (attention_mask == 0)        # True = padding token
+        text_raw  = roberta_out.last_hidden_state  # (batch, 128, 1024)
+        text_mask = (attention_mask == 0)  
 
         # ── Stage 1: encode each modality ────────────────────
         a = self.audio_encoder (audio,    padding_mask=None)       # (batch, 500, 128)

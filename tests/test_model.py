@@ -15,7 +15,8 @@ class TestModelArchitecture:
     def test_model_has_required_components(self, model):
         """Model must have all required submodules."""
         # model = TransformerFusionModel()
-        assert hasattr(model, 'distilbert'),      "Missing distilbert"
+        # assert hasattr(model, 'distilbert'),      "Missing distilbert"
+        assert hasattr(model, 'roberta'), "Missing roberta"
         assert hasattr(model, 'audio_encoder'),   "Missing audio_encoder"
         assert hasattr(model, 'vision_encoder'),  "Missing vision_encoder"
         assert hasattr(model, 'text_encoder'),    "Missing text_encoder"
@@ -25,9 +26,9 @@ class TestModelArchitecture:
     def test_distilbert_frozen(self, model):
         """DistilBERT weights must be frozen — should not train."""
         # model = TransformerFusionModel()
-        for name, param in model.distilbert.named_parameters():
-            if 'transformer.layer.4' not in name and \
-               'transformer.layer.5' not in name:
+        for name, param in model.roberta.named_parameters():
+            if 'encoder.layer.23' not in name and \
+               'encoder.layer.22' not in name:
                 assert not param.requires_grad, \
                     f"DistilBERT param {name} should be frozen"
 
