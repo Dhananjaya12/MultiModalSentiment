@@ -54,9 +54,19 @@ def evaluate(model, test_loader, cfg) -> dict:
     within_half = np.mean(np.abs(pred_floats - label_floats) <= 0.5)
     within_one  = np.mean(np.abs(pred_floats - label_floats) <= 1.0)
 
-    # ── Weighted MAE ──────────────────────────────────────────────
-    label_counts   = np.bincount(test_labels.astype(int), minlength=27).astype(float)
-    sample_weights = 1.0 / (label_counts[test_labels.astype(int)] + 1e-8)
+    # # ── Weighted MAE ──────────────────────────────────────────────
+    # label_counts   = np.bincount(test_labels.astype(int), minlength=27).astype(float)
+    # sample_weights = 1.0 / (label_counts[test_labels.astype(int)] + 1e-8)
+    # sample_weights = sample_weights / sample_weights.sum()
+    # weighted_mae   = np.average(np.abs(pred_floats - label_floats),
+    #                             weights=sample_weights)
+
+    # Map float labels to 27-class indices for weighting
+    label_indices  = np.array([
+        int(np.argmin(np.abs(LABEL_VALUES_NP - l))) for l in label_floats
+    ])
+    label_counts   = np.bincount(label_indices, minlength=27).astype(float)
+    sample_weights = 1.0 / (label_counts[label_indices] + 1e-8)
     sample_weights = sample_weights / sample_weights.sum()
     weighted_mae   = np.average(np.abs(pred_floats - label_floats),
                                 weights=sample_weights)
