@@ -9,6 +9,7 @@ import mlflow.pytorch
 import subprocess
 import math
 import json
+from tqdm import tqdm
 
 MELD_LABEL_VALUES   = np.array([-1., 0., 1.], dtype=np.float32)
 MOSEI_LABEL_VALUES  = np.array([
@@ -70,7 +71,9 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True):
     context = torch.enable_grad() if is_train else torch.no_grad()
 
     with context:
-        for batch in loader:
+        # for batch in loader:
+        for batch in tqdm(loader, desc=f'{"Train" if is_train else "Val  "}',
+                          leave=False, unit='batch'):
             input_ids      = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
             audio          = batch['audio'].to(device)
