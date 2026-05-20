@@ -153,21 +153,21 @@ def get_dataloaders(cfg):
         train_dataset,
         batch_size  = cfg['batch_size'],
         shuffle     = True,
-        num_workers = 2,
+        num_workers = 0,
         pin_memory  = pin
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size  = cfg['batch_size'],
         shuffle     = False,
-        num_workers = 2,
+        num_workers = 0,
         pin_memory  = pin
     )
     test_loader = DataLoader(
         test_dataset,
         batch_size  = cfg['batch_size'],
         shuffle     = False,
-        num_workers = 2,
+        num_workers = 0,
         pin_memory  = pin
     )
 
