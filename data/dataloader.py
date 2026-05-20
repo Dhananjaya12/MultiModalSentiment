@@ -9,19 +9,19 @@ from pathlib import Path
 
 import numpy as np
 
-LABEL_VALUES = np.array([
-    -3., -2.6666667, -2.3333333, -2., -1.6666666, -1.3333334,
-    -1., -0.6666667, -0.5, -0.33333334, -0.16666667, 0.,
-    0.16666667, 0.33333334, 0.5, 0.6666667, 0.8333333, 1.,
-    1.1666666, 1.3333334, 1.5, 1.6666666, 1.8333334, 2.,
-    2.3333333, 2.6666667, 3.
-], dtype=np.float32)
+# LABEL_VALUES = np.array([
+#     -3., -2.6666667, -2.3333333, -2., -1.6666666, -1.3333334,
+#     -1., -0.6666667, -0.5, -0.33333334, -0.16666667, 0.,
+#     0.16666667, 0.33333334, 0.5, 0.6666667, 0.8333333, 1.,
+#     1.1666666, 1.3333334, 1.5, 1.6666666, 1.8333334, 2.,
+#     2.3333333, 2.6666667, 3.
+# ], dtype=np.float32)
 
-def label_to_idx(label):
-    return int(np.argmin(np.abs(LABEL_VALUES - label)))
+# def label_to_idx(label):
+#     return int(np.argmin(np.abs(LABEL_VALUES - label)))
 
-def idx_to_label(idx):
-    return float(LABEL_VALUES[idx])
+# def idx_to_label(idx):
+#     return float(LABEL_VALUES[idx])
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -97,25 +97,44 @@ def get_dataloaders(cfg):
     splits indices into train/val/test,
     returns three DataLoaders.
     """
-    hdf5_path = Path(cfg['data_folder']) / "mosei_dataset.h5"
+    # hdf5_path = Path(cfg['data_folder']) / "mosei_dataset.h5"
+    hdf5_path = Path(cfg['data_folder']) / cfg.get('hdf5_file', 'meld_dataset.h5')
 
     # Get total number of samples
     with h5py.File(hdf5_path, 'r') as f:
         N = f['audio'].shape[0]
         # N = 10
 
-    print(f"Total samples in HDF5: {N}")
+        print(f"Total samples in HDF5: {N}")
 
-    # Split indices — never shuffle the actual data, just the indices
-    np.random.seed(cfg['seed'])
-    all_indices = np.random.permutation(N).tolist()
+    # # Split indices — never shuffle the actual data, just the indices
+    # np.random.seed(cfg['seed'])
+    # all_indices = np.random.permutation(N).tolist()
 
-    train_end = int(cfg['train_ratio'] * N)
-    val_end   = int((cfg['train_ratio'] + cfg['val_ratio']) * N)
+    # train_end = int(cfg['train_ratio'] * N)
+    # val_end   = int((cfg['train_ratio'] + cfg['val_ratio']) * N)
 
-    train_idx = all_indices[:train_end]
-    val_idx   = all_indices[train_end:val_end]
-    test_idx  = all_indices[val_end:]
+    # train_idx = all_indices[:train_end]
+    # val_idx   = all_indices[train_end:val_end]
+    # test_idx  = all_indices[val_end:]
+
+        if 'n_train' in f.attrs:
+            n_train = int(f.attrs['n_train'])
+            n_dev   = int(f.attrs['n_dev'])
+            n_test  = int(f.attrs['n_test'])
+            train_idx = list(range(0, n_train))
+            val_idx   = list(range(n_train, n_train + n_dev))
+            test_idx  = list(range(n_train + n_dev, n_train + n_dev + n_test))
+            print(f"  Using fixed splits from HDF5 attrs")
+        else:
+            # Original random split for MOSEI
+            np.random.seed(cfg['seed'])
+            all_indices = np.random.permutation(N).tolist()
+            train_end = int(cfg['train_ratio'] * N)
+            val_end   = int((cfg['train_ratio'] + cfg['val_ratio']) * N)
+            train_idx = all_indices[:train_end]
+            val_idx   = all_indices[train_end:val_end]
+            test_idx  = all_indices[val_end:]
 
     print(f"  Train : {len(train_idx)} samples")
     print(f"  Val   : {len(val_idx)}   samples")

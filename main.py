@@ -27,7 +27,7 @@ def main():
     print('\nBuilding model...')
     model = TransformerFusionModel(cfg)
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f'Trainable parameters: {trainable:,}  (DistilBERT frozen)\n')
+    print(f'Trainable parameters: {trainable:,}  (RoBERTa frozen except last 2 layers)\n')
 
     # ── Step 3: Train ─────────────────────────────────────────────
     history = train(model, train_loader, val_loader, cfg)

@@ -9,7 +9,7 @@ class TestHDF5File:
 
     def test_file_exists(self, cfg):
         """HDF5 file must exist at the configured path."""
-        path = Path(cfg['data_folder']) / "mosei_dataset.h5"
+        path = Path(cfg['data_folder']) / cfg.get('hdf5_file', 'mosei_dataset.h5')
         assert path.exists(), \
             f"HDF5 file not found at {path}"
 
@@ -37,7 +37,7 @@ class TestHDF5File:
             f"Audio features should be {cfg['audio_dim']}, got {audio.shape[2]}"
 
     def test_vision_shape(self, hdf5_sample, cfg):
-        """Vision must be (N, 500, 713)."""
+        """Audio must be (N, seq_len, audio_dim)."""
         vision = hdf5_sample['vision']
         assert vision.ndim == 3, \
             f"Vision should be 3D, got {vision.ndim}D"
@@ -47,12 +47,19 @@ class TestHDF5File:
             f"Vision features should be {cfg['vision_dim']}, got {vision.shape[2]}"
 
     def test_labels_range(self, hdf5_sample):
-        """Labels must be within [-3, 3] — MOSEI range."""
-        labels = hdf5_sample['labels']
-        assert labels.min() >= -3.0, \
-            f"Label below -3: {labels.min()}"
-        assert labels.max() <= 3.0, \
-            f"Label above +3: {labels.max()}"
+        # """Labels must be within [-3, 3] — MOSEI range."""
+        # labels = hdf5_sample['labels']
+        # assert labels.min() >= -3.0, \
+        #     f"Label below -3: {labels.min()}"
+        # assert labels.max() <= 3.0, \
+        #     f"Label above +3: {labels.max()}"
+
+        """Labels must be within valid range for dataset."""
+        dataset = 'meld'  # change to 'mosei' if using MOSEI
+        min_label = -1.0 if dataset == 'meld' else -3.0
+        max_label =  1.0 if dataset == 'meld' else  3.0
+        assert labels.min() >= min_label, f"Label below {min_label}: {labels.min()}"
+        assert labels.max() <= max_label, f"Label above {max_label}: {labels.max()}"
 
     def test_no_nan_in_audio(self, hdf5_sample):
         """Audio must not contain any NaN values."""

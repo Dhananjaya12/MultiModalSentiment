@@ -4,7 +4,7 @@ import numpy as np
 import h5py
 import json
 from pathlib import Path
-from transformers import DistilBertTokenizer
+from transformers import RobertaTokenizer
 from model.model import TransformerFusionModel
 
 
@@ -25,7 +25,7 @@ def device():
 @pytest.fixture(scope="session")
 def tokenizer():
     """Load tokenizer once for all tests."""
-    return DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+    return RobertaTokenizer.from_pretrained('roberta-large')
 
 
 @pytest.fixture(scope="session")
@@ -86,7 +86,7 @@ def hdf5_sample(cfg):
     Loads first 10 samples from real HDF5 file.
     Used for data quality tests.
     """
-    with h5py.File(Path(cfg['data_folder']) / "mosei_dataset.h5", 'r') as f:
+    with h5py.File(Path(cfg['data_folder']) / cfg.get('hdf5_file', 'mosei_dataset.h5'), 'r') as f:
         return {
             'audio':  f['audio'][:10],    # (10, 500, 74)
             'vision': f['vision'][:10],   # (10, 500, 713)

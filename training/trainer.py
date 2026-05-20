@@ -10,7 +10,8 @@ import subprocess
 import math
 import json
 
-LABEL_VALUES_NP = np.array([
+MELD_LABEL_VALUES   = np.array([-1., 0., 1.], dtype=np.float32)
+MOSEI_LABEL_VALUES  = np.array([
     -3., -2.6666667, -2.3333333, -2., -1.6666666, -1.3333334,
     -1., -0.6666667, -0.5, -0.33333334, -0.16666667, 0.,
     0.16666667, 0.33333334, 0.5, 0.6666667, 0.8333333, 1.,
@@ -18,10 +19,10 @@ LABEL_VALUES_NP = np.array([
     2.3333333, 2.6666667, 3.
 ], dtype=np.float32)
 
-def snap_to_valid(preds: np.ndarray) -> np.ndarray:
-    diffs = np.abs(preds[:, None] - LABEL_VALUES_NP[None, :])
-    idx   = diffs.argmin(axis=1)
-    return LABEL_VALUES_NP[idx]
+def snap_to_valid(preds: np.ndarray, dataset: str = 'mosei') -> np.ndarray:
+    label_vals = MELD_LABEL_VALUES if dataset == 'meld' else MOSEI_LABEL_VALUES
+    diffs = np.abs(preds[:, None] - label_vals[None, :])
+    return label_vals[diffs.argmin(axis=1)]
 
 def get_dvc_data_version():
     """Returns the MD5 hash of current data version."""
@@ -164,7 +165,8 @@ def train(model, train_loader, val_loader, cfg) -> dict:
             )
 
             # Snap val predictions to valid MOSEI values
-            val_preds_snapped = snap_to_valid(val_preds)
+            # val_preds_snapped = snap_to_valid(val_preds)
+            val_preds_snapped = snap_to_valid(val_preds, dataset="meld")
             val_mae  = np.mean(np.abs(val_preds_snapped - val_labels))
             val_corr = pearsonr(val_preds_snapped, val_labels)[0]
 

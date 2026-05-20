@@ -8,7 +8,8 @@ import mlflow
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-LABEL_VALUES_NP = np.array([
+MELD_LABEL_VALUES   = np.array([-1., 0., 1.], dtype=np.float32)
+MOSEI_LABEL_VALUES  = np.array([
     -3., -2.6666667, -2.3333333, -2., -1.6666666, -1.3333334,
     -1., -0.6666667, -0.5, -0.33333334, -0.16666667, 0.,
     0.16666667, 0.33333334, 0.5, 0.6666667, 0.8333333, 1.,
@@ -16,10 +17,10 @@ LABEL_VALUES_NP = np.array([
     2.3333333, 2.6666667, 3.
 ], dtype=np.float32)
 
-def snap_to_valid(preds: np.ndarray) -> np.ndarray:
-    diffs = np.abs(preds[:, None] - LABEL_VALUES_NP[None, :])
-    idx   = diffs.argmin(axis=1)
-    return LABEL_VALUES_NP[idx]
+def snap_to_valid(preds: np.ndarray, dataset: str = 'mosei') -> np.ndarray:
+    label_vals = MELD_LABEL_VALUES if dataset == 'meld' else MOSEI_LABEL_VALUES
+    diffs = np.abs(preds[:, None] - label_vals[None, :])
+    return label_vals[diffs.argmin(axis=1)]
 
 
 def evaluate(model, test_loader, cfg) -> dict:
@@ -37,7 +38,7 @@ def evaluate(model, test_loader, cfg) -> dict:
     _, _, test_preds, test_labels = run_one_epoch(
         model, test_loader, is_train=False
     )
-    test_preds = snap_to_valid(test_preds)
+    test_preds = snap_to_valid(test_preds, dataset='meld')
 
     # pred_floats  = np.array([idx_to_label(i) for i in test_preds])
     # label_floats = np.array([idx_to_label(i) for i in test_labels])
@@ -62,14 +63,11 @@ def evaluate(model, test_loader, cfg) -> dict:
     #                             weights=sample_weights)
 
     # Map float labels to 27-class indices for weighting
-    label_indices  = np.array([
-        int(np.argmin(np.abs(LABEL_VALUES_NP - l))) for l in label_floats
-    ])
-    label_counts   = np.bincount(label_indices, minlength=27).astype(float)
-    sample_weights = 1.0 / (label_counts[label_indices] + 1e-8)
+    unique_labels, counts = np.unique(label_floats, return_counts=True)
+    weight_map     = {l: 1.0/c for l, c in zip(unique_labels, counts)}
+    sample_weights = np.array([weight_map[l] for l in label_floats])
     sample_weights = sample_weights / sample_weights.sum()
-    weighted_mae   = np.average(np.abs(pred_floats - label_floats),
-                                weights=sample_weights)
+    weighted_mae   = np.average(np.abs(pred_floats - label_floats), weights=sample_weights)
 
     # ── MAE per sentiment region ──────────────────────────────────
     regions = {
@@ -92,6 +90,7 @@ def evaluate(model, test_loader, cfg) -> dict:
         'mae':          mae,
         'weighted_mae': weighted_mae,
         'pearson':      pearson,
+        'corr':         pearson,
         'spearman':     spearman,
         'within_half':  within_half,
         'within_one':   within_one,
