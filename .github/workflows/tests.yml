@@ -1,54 +1,47 @@
 name: Run Tests
 
-# ── When to run ───────────────────────────────────────────────────
 on:
   push:
-    branches: [ main ]        # run when you push to main
+    branches: [ main ]
   pull_request:
-    branches: [ main ]        # run when you open a pull request
+    branches: [ main ]
 
-# ── What to run ───────────────────────────────────────────────────
 jobs:
   test:
-    runs-on: ubuntu-latest    # GitHub provides a free Linux machine
+    runs-on: ubuntu-latest
 
     steps:
 
-    # Step 1: Download your code
     - name: Checkout code
       uses: actions/checkout@v3
 
-    # Step 2: Set up Python
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version:  '3.12'
 
-    # Step 3: Cache pip packages
-    # So it doesn't reinstall everything from scratch every run
     - name: Cache pip packages
       uses: actions/cache@v3
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
 
-    # Step 4: Install dependencies
     - name: Install dependencies
       run: pip install -r requirements.txt -q
 
-    # Step 5: Create a fake config for CI
-    # Real config has local paths that don't exist on GitHub's machine
     - name: Create CI config
       run: |
         cat > config.json << 'EOF'
         {
-            "data_folder": "tests/fixtures",
+            "data_folder":       "tests/fixtures",
+            "hdf5_file":         "meld_dataset.h5",
             "model_save_path":   "tests/fixtures/best_model.pt",
             "plots_save_path":   "tests/fixtures/",
+            "dataset":           "meld",
             "audio_dim":         74,
-            "vision_dim":        713,
-            "text_dim":          768,
-            "seq_len":           500,
+            "vision_dim":        1404,
+            "text_dim":          1024,
+            "seq_len":           300,
             "max_text_len":      128,
             "d_model":           128,
             "n_heads":           4,
@@ -65,12 +58,8 @@ jobs:
         }
         EOF
 
-    # Step 6: Create small fake HDF5 for CI
-    # Can't use your real 10GB file on GitHub
     - name: Create test fixtures
       run: PYTHONPATH=. python tests/create_test_fixtures.py
 
-    # Step 7: Run tests
     - name: Run pytest
       run: pytest tests/ -v --ignore=tests/test_pipeline.py
-      # ignore pipeline tests — they need real HDF5 data

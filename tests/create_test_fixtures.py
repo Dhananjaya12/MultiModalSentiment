@@ -8,25 +8,30 @@ import numpy as np
 import torch
 from pathlib import Path
 
-# Create fixtures folder
 Path("tests/fixtures").mkdir(exist_ok=True)
 
-# ── Create tiny fake HDF5 ─────────────────────────────────────────
 print("Creating fake HDF5...")
-N = 20   # just 20 samples — enough to test shapes and logic
+N = 20
 
-with h5py.File("tests/fixtures/mosei_dataset.h5", "w") as f:
-    f.create_dataset("audio",  data=np.random.randn(N, 500, 74).astype(np.float32))
-    f.create_dataset("vision", data=np.random.randn(N, 500, 713).astype(np.float32))
-    f.create_dataset("labels", data=np.random.uniform(-3, 3, N).astype(np.float32))
+with h5py.File("tests/fixtures/meld_dataset.h5", "w") as f:
+    f.create_dataset("audio",  data=np.random.randn(N, 300, 74).astype(np.float32))
+    f.create_dataset("vision", data=np.random.randn(N, 300, 1404).astype(np.float32))
+    f.create_dataset("labels", data=np.random.choice([-1., 0., 1.], N).astype(np.float32))
 
-    dt = h5py.special_dtype(vlen=str)
+    dt    = h5py.string_dtype(encoding='utf-8')
     texts = np.array([f"test sentence {i}" for i in range(N)], dtype=object)
     f.create_dataset("texts", data=texts, dtype=dt)
 
+    f.attrs['n_train']    = 16
+    f.attrs['n_dev']      = 2
+    f.attrs['n_test']     = 2
+    f.attrs['dataset']    = 'meld'
+    f.attrs['seq_len']    = 300
+    f.attrs['audio_dim']  = 74
+    f.attrs['vision_dim'] = 1404
+
 print(f"✅ Fake HDF5 created: {N} samples")
 
-# ── Create fake saved model ───────────────────────────────────────
 print("Creating fake model checkpoint...")
 from model.model import TransformerFusionModel
 import json

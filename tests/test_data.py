@@ -55,6 +55,7 @@ class TestHDF5File:
         #     f"Label above +3: {labels.max()}"
 
         """Labels must be within valid range for dataset."""
+        labels    = hdf5_sample['labels']
         dataset = 'meld'  # change to 'mosei' if using MOSEI
         min_label = -1.0 if dataset == 'meld' else -3.0
         max_label =  1.0 if dataset == 'meld' else  3.0
