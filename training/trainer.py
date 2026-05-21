@@ -44,14 +44,19 @@ def get_dvc_data_version():
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
+# def sentiment_loss(preds, targets):
+#     mae      = nn.L1Loss()(preds, targets)
+#     mse      = nn.MSELoss()(preds, targets)
+#     preds_c  = preds   - preds.mean()
+#     tgt_c    = targets - targets.mean()
+#     corr     = -((preds_c * tgt_c).mean() /
+#                  (preds.std() * targets.std() + 1e-8))
+#     return mae + 0.5 * mse + 0.3 * corr
+
 def sentiment_loss(preds, targets):
-    mae      = nn.L1Loss()(preds, targets)
-    mse      = nn.MSELoss()(preds, targets)
-    preds_c  = preds   - preds.mean()
-    tgt_c    = targets - targets.mean()
-    corr     = -((preds_c * tgt_c).mean() /
-                 (preds.std() * targets.std() + 1e-8))
-    return mae + 0.5 * mse + 0.3 * corr
+    mae = nn.L1Loss()(preds, targets)
+    mse = nn.MSELoss()(preds, targets)
+    return mae + 0.5 * mse
 
 
 def run_one_epoch(model, loader, optimizer=None, is_train: bool = True):
@@ -132,7 +137,8 @@ def train(model, train_loader, val_loader, cfg) -> dict:
 
         optimizer = optim.AdamW([
             # {'params': [p for p in model.distilbert.parameters() if p.requires_grad], 'lr': 5e-6},
-            {'params': [p for p in model.roberta.parameters() if p.requires_grad], 'lr': 5e-6},
+            # {'params': [p for p in model.roberta.parameters() if p.requires_grad], 'lr': 5e-6},
+            {'params': [p for p in model.roberta.parameters() if p.requires_grad], 'lr': 2e-5},
             {'params': model.audio_encoder.parameters(),  'lr': cfg['learning_rate']},
             {'params': model.vision_encoder.parameters(), 'lr': cfg['learning_rate']},
             {'params': model.text_encoder.parameters(),   'lr': cfg['learning_rate']},
@@ -167,11 +173,19 @@ def train(model, train_loader, val_loader, cfg) -> dict:
                 model, val_loader, is_train=False
             )
 
+            ### Debugging
+            print(f'Raw preds    — min:{val_preds.min():.4f} max:{val_preds.max():.4f} std:{val_preds.std():.4f}')
+            val_snapped = snap_to_valid(val_preds, dataset='meld')
+            print(f'Snapped preds unique: {np.unique(val_snapped, return_counts=True)}')
+            print(f'Val labels   unique: {np.unique(val_labels,  return_counts=True)}')   
+            ### Debugging
+
             # Snap val predictions to valid MOSEI values
             # val_preds_snapped = snap_to_valid(val_preds)
             val_preds_snapped = snap_to_valid(val_preds, dataset="meld")
             val_mae  = np.mean(np.abs(val_preds_snapped - val_labels))
-            val_corr = pearsonr(val_preds_snapped, val_labels)[0]
+            # val_corr = pearsonr(val_preds_snapped, val_labels)[0]
+            val_corr = pearsonr(val_preds_snapped, val_labels)[0] if val_preds_snapped.std() > 0 and val_labels.std() > 0 else 0.0
 
             scheduler.step()
 
@@ -205,7 +219,7 @@ def train(model, train_loader, val_loader, cfg) -> dict:
                 print(f'  No improvement for {no_improve}/{PATIENCE} epochs')
                 if no_improve >= PATIENCE:
                     print(f'\n🛑 Early stopping at epoch {epoch+1}')
-                    break
+                    break                                                                                                      
 
         mlflow.log_metrics({
             "best_val_mae":  best_val_mae,
