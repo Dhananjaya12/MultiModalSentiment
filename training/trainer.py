@@ -148,9 +148,12 @@ def train(model, train_loader, val_loader, cfg) -> dict:
 
         def warmup_cosine(epoch):
             warmup_epochs = 2
+            num_epochs = cfg['num_epochs']
             if epoch < warmup_epochs:
-                return epoch / warmup_epochs
-            progress = (epoch - warmup_epochs) / (cfg['num_epochs'] - warmup_epochs)
+                return (epoch / warmup_epochs) if warmup_epochs > 0 else 1.0
+            # No cosine phase if training is shorter than warmup (or equal): stay at LR scale 1.0.
+            cosine_span = max(num_epochs - warmup_epochs, 1)
+            progress = min((epoch - warmup_epochs) / cosine_span, 1.0)
             return 0.5 * (1 + math.cos(math.pi * progress))
 
         scheduler    = optim.lr_scheduler.LambdaLR(optimizer, warmup_cosine)
