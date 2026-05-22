@@ -48,19 +48,21 @@ def get_dvc_data_version():
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-# def sentiment_loss(preds, targets):
-#     mae      = nn.L1Loss()(preds, targets)
-#     mse      = nn.MSELoss()(preds, targets)
-#     preds_c  = preds   - preds.mean()
-#     tgt_c    = targets - targets.mean()
-#     corr     = -((preds_c * tgt_c).mean() /
-#                  (preds.std() * targets.std() + 1e-8))
-#     return mae + 0.5 * mse + 0.3 * corr
-
 def sentiment_loss(preds, targets):
-    mae = nn.L1Loss()(preds, targets)
-    mse = nn.MSELoss()(preds, targets)
-    return mae + 0.5 * mse
+    mae      = nn.L1Loss()(preds, targets)
+    mse      = nn.MSELoss()(preds, targets)
+    preds_c  = preds   - preds.mean()
+    tgt_c    = targets - targets.mean()
+    # corr     = -((preds_c * tgt_c).mean() /
+    #              (preds.std() * targets.std() + 1e-8))
+    corr = -((preds_c * tgt_c).mean() /
+         (preds.std().clamp(min=1e-8) * targets.std().clamp(min=1e-8)))
+    return mae + 0.5 * mse + 0.3 * corr
+
+# def sentiment_loss(preds, targets):
+#     mae = nn.L1Loss()(preds, targets)
+#     mse = nn.MSELoss()(preds, targets)
+#     return mae + 0.5 * mse
 
 
 def run_one_epoch(model, loader, optimizer=None, is_train: bool = True):

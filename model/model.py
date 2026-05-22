@@ -43,7 +43,7 @@ class SentimentRegressor(nn.Module):
             nn.Linear(d_model, d_model // 2),
             nn.LayerNorm(d_model // 2),
             nn.ReLU(),
-            nn.Dropout(dropout),       # second dropout before final layer
+            # nn.Dropout(dropout),       # second dropout before final layer
             nn.Linear(d_model // 2, 1)
         )
 
