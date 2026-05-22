@@ -11,8 +11,9 @@ import math
 import json
 from tqdm import tqdm
 
-# Debug-session NDJSON path (workspace root relative to repo)
-_DEBUG_LOG = Path(__file__).resolve().parents[1] / "debug-e745fb.log"
+# NDJSON debug log — use a writable path on Kaggle, e.g. Path("/kaggle/working/debug-e745fb.log")
+# _DEBUG_LOG = Path(__file__).resolve().parents[1] / "debug-e745fb.log"
+_DEBUG_LOG = Path("/kaggle/working/debug-e745fb.log")
 
 MELD_LABEL_VALUES   = np.array([-1., 0., 1.], dtype=np.float32)
 MOSEI_LABEL_VALUES  = np.array([
@@ -221,6 +222,7 @@ def train(model, train_loader, val_loader, cfg) -> dict:
                     },
                     "timestamp": int(_time.time() * 1000),
                 }
+                # _DEBUG_LOG.parent.mkdir(parents=True, exist_ok=True)
                 with open(_DEBUG_LOG, "a", encoding="utf-8") as _lf:
                     _lf.write(json.dumps(_payload) + "\n")
             except Exception:
