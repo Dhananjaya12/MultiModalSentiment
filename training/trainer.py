@@ -199,7 +199,7 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
         resume_path = Path(resume_from) if resume_from else ckpt_path
         if resume_path.exists():
             print(f'🔄 Resuming from {resume_path}...')
-            ckpt = torch.load(resume_path, map_location=device)
+            ckpt = torch.load(resume_path, map_location=device, weights_only=False)
             model.load_state_dict(ckpt['model_state'])
             optimizer.load_state_dict(ckpt['optimizer_state'])
             scheduler.load_state_dict(ckpt['scheduler_state'])

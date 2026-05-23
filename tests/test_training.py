@@ -242,7 +242,6 @@ class TestCheckpointResume:
 
         # Load into new model
         model2 = TransformerFusionModel(cfg)
-        model2 = model2.to(device) 
         ckpt   = torch.load(ckpt_path, map_location='cpu')
         model2.load_state_dict(ckpt['model_state'])
 
