@@ -1,0 +1,388 @@
+"""
+inference/predictor.py
+
+SentimentPredictor — loads model once, handles all inference modes.
+
+Whisper strategy:
+  webcam mode  → whisper-tiny  (fast, ~150MB)
+  upload mode  → whisper-base  (accurate, ~140MB)
+  Both loaded lazily — only when first used.
+"""
+
+import os
+import json
+import torch
+import numpy as np
+from pathlib import Path
+from typing import Optional
+
+from inference.feature_extractor import (
+    extract_from_video,
+    extract_text_features,
+    apply_normalization,
+    SEQ_LEN, AUDIO_DIM, VISION_DIM,
+)
+from inference.utils import (
+    snap_to_valid,
+    score_to_label,
+    score_to_color,
+    score_to_emoji,
+    estimate_confidence,
+    check_modality_quality,
+    format_result,
+)
+
+
+class SentimentPredictor:
+    """
+    Single entry point for all sentiment inference modes.
+
+    Usage:
+        predictor = SentimentPredictor(
+            model_path  = 'best_model.pt',
+            config_path = 'config.json',
+        )
+        result = predictor.predict_from_text("I love this!")
+        result = predictor.predict_from_video("clip.mp4")
+    """
+
+    def __init__(
+        self,
+        model_path:  str,
+        config_path: str,
+        device:      Optional[str] = None,
+    ):
+        self.model_path  = Path(model_path)
+        self.config_path = Path(config_path)
+
+        # ── Device ────────────────────────────────────────────────
+        if device is None:
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        else:
+            self.device = torch.device(device)
+        print(f'SentimentPredictor: device={self.device}')
+
+        # ── Config ────────────────────────────────────────────────
+        with open(config_path) as f:
+            self.cfg = json.load(f)
+
+        self.dataset    = self.cfg.get('dataset', 'meld')
+        self.max_text_len = self.cfg.get('max_text_len', 128)
+
+        # ── Load model ────────────────────────────────────────────
+        print('Loading model...')
+        from model.model import TransformerFusionModel
+        self.model = TransformerFusionModel(self.cfg)
+        state = torch.load(
+            model_path,
+            map_location=self.device,
+            weights_only=False,
+        )
+        # Support both raw state dict and checkpoint dict
+        if isinstance(state, dict) and 'model_state' in state:
+            state = state['model_state']
+        self.model.load_state_dict(state)
+        self.model.to(self.device)
+        self.model.eval()
+        print(f'✅ Model loaded from {model_path}')
+
+        # ── Tokenizer ─────────────────────────────────────────────
+        print('Loading tokenizer...')
+        from transformers import RobertaTokenizerFast
+        self.tokenizer = RobertaTokenizerFast.from_pretrained('roberta-large')
+        print('✅ Tokenizer ready')
+
+        # ── Whisper — lazy loaded ─────────────────────────────────
+        self._whisper_tiny = None   # for webcam
+        self._whisper_base = None   # for video upload
+
+    # ── Whisper lazy loading ──────────────────────────────────────
+
+    def _get_whisper(self, mode: str = 'upload'):
+        """
+        Load Whisper model on first use.
+        webcam → tiny (fast)
+        upload → base (accurate)
+        """
+        import whisper
+        if mode == 'webcam':
+            if self._whisper_tiny is None:
+                print('Loading whisper-tiny for webcam...')
+                self._whisper_tiny = whisper.load_model('tiny')
+            return self._whisper_tiny
+        else:
+            if self._whisper_base is None:
+                print('Loading whisper-base for video upload...')
+                self._whisper_base = whisper.load_model('base')
+            return self._whisper_base
+
+    def _transcribe(self, audio_path: str, mode: str = 'upload') -> tuple:
+        """
+        Transcribe audio file.
+
+        Returns:
+            text:     full transcript string
+            segments: list of {start, end, text} dicts
+        """
+        try:
+            wmodel  = self._get_whisper(mode)
+            result  = wmodel.transcribe(
+                audio_path,
+                word_timestamps = (mode == 'upload'),  # segments for timeline
+                language        = 'en',
+            )
+            text     = result.get('text', '').strip()
+            segments = result.get('segments', [])
+            return text, segments
+        except Exception as e:
+            return '', []
+
+    # ── Core inference ────────────────────────────────────────────
+
+    def _run_model(
+        self,
+        input_ids:      torch.Tensor,
+        attention_mask: torch.Tensor,
+        audio:          np.ndarray,
+        vision:         np.ndarray,
+    ) -> float:
+        """
+        Single forward pass.
+        Returns raw continuous score (float).
+        """
+        audio_t  = torch.tensor(audio,  dtype=torch.float32).unsqueeze(0).to(self.device)
+        vision_t = torch.tensor(vision, dtype=torch.float32).unsqueeze(0).to(self.device)
+        ids_t    = input_ids.unsqueeze(0).to(self.device)
+        mask_t   = attention_mask.unsqueeze(0).to(self.device)
+
+        with torch.no_grad():
+            output = self.model(ids_t, mask_t, audio_t, vision_t)
+
+        return float(output.squeeze().cpu().item())
+
+    # ── Public API ────────────────────────────────────────────────
+
+    def predict_from_text(self, text: str) -> dict:
+        """
+        Predict sentiment from text only.
+        Audio and vision are set to zeros.
+
+        Args:
+            text: input string
+
+        Returns:
+            result dict from format_result()
+        """
+        if not text or not text.strip():
+            return {'error': 'empty_text', 'message': 'Please provide some text.'}
+
+        input_ids, attention_mask = extract_text_features(
+            text, self.tokenizer, self.max_text_len
+        )
+
+        audio  = np.zeros((SEQ_LEN, AUDIO_DIM),  dtype=np.float32)
+        vision = np.zeros((SEQ_LEN, VISION_DIM), dtype=np.float32)
+
+        raw_score    = self._run_model(input_ids, attention_mask, audio, vision)
+        snapped      = snap_to_valid(raw_score, self.dataset)
+        label        = score_to_label(snapped)
+        confidence   = estimate_confidence(raw_score, self.dataset)
+
+        modality_info = check_modality_quality(audio, vision, text)
+
+        return format_result(
+            raw_score     = raw_score,
+            snapped_score = snapped,
+            label         = label,
+            confidence    = confidence,
+            modality_info = modality_info,
+            transcript    = text,
+            dataset       = self.dataset,
+        )
+
+    def predict_from_video(
+        self,
+        video_path: str,
+        mode:       str = 'upload',
+    ) -> dict:
+        """
+        Predict sentiment from a video/audio file.
+        Extracts audio, vision, and transcribes speech.
+
+        Args:
+            video_path: path to .mp4 / .mov / .avi / .wav / .mp3
+            mode:       'upload' or 'webcam'
+
+        Returns:
+            result dict from format_result(), or {'error': ...}
+        """
+        if not os.path.exists(video_path):
+            return {'error': 'file_not_found', 'message': f'File not found: {video_path}'}
+
+        try:
+            # ── Extract audio + vision ────────────────────────────
+            feats      = extract_from_video(video_path)
+            audio_norm = feats['audio']
+            vision_norm= feats['vision']
+            audio_raw  = feats['audio_raw']
+            vision_raw = feats['vision_raw']
+
+            # ── Transcribe ────────────────────────────────────────
+            # Extract audio to temp wav for Whisper
+            temp_wav = str(video_path) + '_whisper.wav'
+            os.system(
+                f'ffmpeg -i "{video_path}" -ac 1 -ar 16000 '
+                f'"{temp_wav}" -y -loglevel quiet'
+            )
+            text, _ = self._transcribe(temp_wav, mode=mode)
+            if os.path.exists(temp_wav):
+                os.remove(temp_wav)
+
+            # ── Modality quality check ────────────────────────────
+            modality_info = check_modality_quality(audio_raw, vision_raw, text)
+
+            if modality_info['quality'] == 'none':
+                return {
+                    'error':   'no_content',
+                    'message': 'No analyzable content found. '
+                               'Please provide a video with speech or visible face.',
+                }
+
+            # ── Tokenize text ─────────────────────────────────────
+            input_ids, attention_mask = extract_text_features(
+                text, self.tokenizer, self.max_text_len
+            )
+
+            # ── Run model ─────────────────────────────────────────
+            raw_score  = self._run_model(
+                input_ids, attention_mask, audio_norm, vision_norm
+            )
+            snapped    = snap_to_valid(raw_score, self.dataset)
+            label      = score_to_label(snapped)
+            confidence = estimate_confidence(raw_score, self.dataset)
+
+            return format_result(
+                raw_score     = raw_score,
+                snapped_score = snapped,
+                label         = label,
+                confidence    = confidence,
+                modality_info = modality_info,
+                transcript    = text,
+                dataset       = self.dataset,
+            )
+
+        except Exception as e:
+            return {'error': 'inference_failed', 'message': str(e)}
+
+    def predict_utterances(
+        self,
+        video_path: str,
+        mode:       str = 'upload',
+    ) -> list:
+        """
+        Predict sentiment per utterance for timeline view.
+        Uses Whisper segment timestamps to split video into utterances.
+
+        Args:
+            video_path: path to video file
+            mode:       'upload' or 'webcam'
+
+        Returns:
+            list of dicts:
+            [
+              {
+                'start':      float (seconds),
+                'end':        float (seconds),
+                'text':       str,
+                'score':      float,
+                'label':      str,
+                'confidence': float,
+                'color':      str,
+              },
+              ...
+            ]
+        """
+        import tempfile
+
+        if not os.path.exists(video_path):
+            return []
+
+        try:
+            # Transcribe with timestamps
+            temp_wav = str(video_path) + '_whisper_seg.wav'
+            os.system(
+                f'ffmpeg -i "{video_path}" -ac 1 -ar 16000 '
+                f'"{temp_wav}" -y -loglevel quiet'
+            )
+            _, segments = self._transcribe(temp_wav, mode=mode)
+            if os.path.exists(temp_wav):
+                os.remove(temp_wav)
+
+            if not segments:
+                # No segments — treat whole video as one utterance
+                result = self.predict_from_video(video_path, mode=mode)
+                if 'error' not in result:
+                    return [{
+                        'start':      0.0,
+                        'end':        0.0,
+                        'text':       result.get('transcript', ''),
+                        'score':      result['score'],
+                        'label':      result['label'],
+                        'confidence': result['confidence'],
+                        'color':      result['color'],
+                        'emoji':      result['emoji'],
+                    }]
+                return []
+
+            results = []
+            for seg in segments:
+                start = seg.get('start', 0.0)
+                end   = seg.get('end',   0.0)
+                text  = seg.get('text',  '').strip()
+
+                if not text:
+                    continue
+
+                # Extract clip for this segment
+                clip_path = str(video_path) + f'_seg_{start:.1f}.mp4'
+                try:
+                    duration = max(end - start, 0.5)  # min 0.5s
+                    os.system(
+                        f'ffmpeg -i "{video_path}" '
+                        f'-ss {start:.2f} -t {duration:.2f} '
+                        f'-c copy "{clip_path}" -y -loglevel quiet'
+                    )
+
+                    if os.path.exists(clip_path):
+                        feats = extract_from_video(clip_path)
+                        input_ids, attention_mask = extract_text_features(
+                            text, self.tokenizer, self.max_text_len
+                        )
+                        raw_score  = self._run_model(
+                            input_ids, attention_mask,
+                            feats['audio'], feats['vision']
+                        )
+                        snapped    = snap_to_valid(raw_score, self.dataset)
+                        label      = score_to_label(snapped)
+                        confidence = estimate_confidence(raw_score, self.dataset)
+
+                        results.append({
+                            'start':      round(start, 2),
+                            'end':        round(end, 2),
+                            'text':       text,
+                            'score':      snapped,
+                            'raw_score':  raw_score,
+                            'label':      label,
+                            'confidence': round(confidence * 100, 1),
+                            'color':      score_to_color(snapped),
+                            'emoji':      score_to_emoji(snapped),
+                        })
+                finally:
+                    if os.path.exists(clip_path):
+                        os.remove(clip_path)
+
+            return results
+
+        except Exception as e:
+            print(f'predict_utterances error: {e}')
+            return []
