@@ -46,9 +46,26 @@ def get_dvc_data_version():
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
+# def sentiment_loss(preds, targets):
+#     mae     = nn.L1Loss()(preds, targets)
+#     mse     = nn.MSELoss()(preds, targets)
+#     preds_c = preds   - preds.mean()
+#     tgt_c   = targets - targets.mean()
+#     corr    = -((preds_c * tgt_c).mean() /
+#                 (preds.std().clamp(min=1e-8) * targets.std().clamp(min=1e-8)))
+#     return mae + 0.5 * mse + 0.3 * corr
+
 def sentiment_loss(preds, targets):
-    mae     = nn.L1Loss()(preds, targets)
-    mse     = nn.MSELoss()(preds, targets)
+    # Class weights to handle MELD imbalance
+    # neutral=47% → weight 0.6, negative=29% → weight 1.0, positive=23% → weight 1.2
+    weights = torch.ones_like(targets)
+    weights[targets == -1.0] = 1.0
+    weights[targets ==  0.0] = 0.6
+    weights[targets ==  1.0] = 1.2
+    weights = weights / weights.mean()  # normalize
+
+    mae     = (torch.abs(preds - targets) * weights).mean()
+    mse     = ((preds - targets)**2 * weights).mean()
     preds_c = preds   - preds.mean()
     tgt_c   = targets - targets.mean()
     corr    = -((preds_c * tgt_c).mean() /
