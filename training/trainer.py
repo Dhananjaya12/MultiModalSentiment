@@ -96,7 +96,7 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True,
                   audio_drop_prob: float = 0.15,
                   vision_drop_prob: float = 0.15,
                   text_drop_prob: float = 0.05,
-                  scaler=None):   # ← ADD THIS
+                  scaler=None):
     """
     One full pass over the dataset.
     Returns: avg_loss, mae, all_preds, all_labels
@@ -105,19 +105,26 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True,
 
     total_loss = 0.0
     all_preds, all_labels = [], []
+    import time
+    data_time  = 0.0
+    model_time = 0.0
+    batch_count = 0
 
     context = torch.enable_grad() if is_train else torch.no_grad()
 
     with context:
         for batch in tqdm(loader, desc=f'{"Train" if is_train else "Val  "}',
                           leave=False, unit='batch'):
+
+            t0 = time.time()
             input_ids      = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
             audio          = batch['audio'].to(device)
             vision         = batch['vision'].to(device)
             labels         = batch['label'].to(device)
+            data_time += time.time() - t0
 
-            # Apply modality dropout during training only
+            t1 = time.time()
             if is_train and use_modality_dropout:
                 audio, vision, input_ids, attention_mask = apply_modality_dropout(
                     audio, vision, input_ids, attention_mask,
@@ -137,10 +144,17 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True,
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 scaler.step(optimizer)
                 scaler.update()
+            model_time += time.time() - t1
 
             total_loss += loss.item() * len(labels)
             all_preds.extend(preds.detach().cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
+
+            batch_count += 1
+            if batch_count == 3:
+                print(f'\n  [Timing after 3 batches]')
+                print(f'  Data loading : {data_time:.2f}s  ({data_time/batch_count:.2f}s/batch)')
+                print(f'  Model forward: {model_time:.2f}s  ({model_time/batch_count:.2f}s/batch)')
 
     avg_loss  = total_loss / len(loader.dataset)
     preds_np  = np.array(all_preds)
