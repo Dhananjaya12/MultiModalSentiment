@@ -4,7 +4,6 @@ import numpy as np
 import h5py
 import json
 from pathlib import Path
-from transformers import RobertaTokenizer
 from model.model import TransformerFusionModel
 
 
@@ -22,10 +21,10 @@ def device():
     return torch.device('cpu')  # always CPU for tests — faster, consistent
 
 
-@pytest.fixture(scope="session")
-def tokenizer():
-    """Load tokenizer once for all tests."""
-    return RobertaTokenizer.from_pretrained('roberta-large')
+# @pytest.fixture(scope="session")
+# def tokenizer():
+#     """Load tokenizer once for all tests."""
+#     return RobertaTokenizer.from_pretrained('roberta-large')
 
 
 @pytest.fixture(scope="session")
@@ -48,32 +47,18 @@ def model(cfg, device):
 
 
 @pytest.fixture(scope="session")
-def sample_batch(cfg, device, tokenizer):
-    """
-    Creates one small fake batch that looks exactly like real data.
-    Used by model tests — no need to load real HDF5 for basic tests.
-    """
+def sample_batch(cfg, device):   # ← remove tokenizer from args
     batch_size = 4
-
-    # Fake audio (500, 74) per sample
-    audio = torch.randn(batch_size, cfg['seq_len'], cfg['audio_dim']).to(device)
-
-    # Fake vision (500, 713) per sample
+    audio  = torch.randn(batch_size, cfg['seq_len'], cfg['audio_dim']).to(device)
     vision = torch.randn(batch_size, cfg['seq_len'], cfg['vision_dim']).to(device)
 
-    # Fake text
-    texts = ["I really loved this movie"] * batch_size
-    enc   = tokenizer(
-        texts,
-        max_length     = cfg['max_text_len'],
-        padding        = 'max_length',
-        truncation     = True,
-        return_tensors = 'pt'
-    )
+    # Create fake pre-tokenized tensors — no tokenizer needed
+    input_ids      = torch.randint(0, 50265, (batch_size, cfg['max_text_len'])).to(device)
+    attention_mask = torch.ones(batch_size, cfg['max_text_len'], dtype=torch.long).to(device)
 
     return {
-        'input_ids':      enc['input_ids'].to(device),
-        'attention_mask': enc['attention_mask'].to(device),
+        'input_ids':      input_ids,
+        'attention_mask': attention_mask,
         'audio':          audio,
         'vision':         vision,
         'label':          torch.randn(batch_size).to(device),
@@ -82,17 +67,15 @@ def sample_batch(cfg, device, tokenizer):
 
 @pytest.fixture(scope="session")
 def hdf5_sample(cfg):
-    """
-    Loads first 10 samples from real HDF5 file.
-    Used for data quality tests.
-    """
-    with h5py.File(Path(cfg['data_folder']) / cfg.get('hdf5_file', 'mosei_dataset.h5'), 'r') as f:
+    with h5py.File(Path(cfg['data_folder']) / cfg.get('hdf5_file', 'meld_dataset_v2.h5'), 'r') as f:
         return {
-            'audio':  f['audio'][:10],    # (10, 500, 74)
-            'vision': f['vision'][:10],   # (10, 500, 713)
-            'labels': f['labels'][:10],   # (10,)
-            'texts':  f['texts'][:10],    # (10,)
-            'total':  f['audio'].shape[0] # total samples
+            'audio':          f['audio'][:10],
+            'vision':         f['vision'][:10],
+            'labels':         f['labels'][:10],
+            'texts':          f['texts'][:10],
+            'input_ids':      f['input_ids'][:10],       # ← ADD
+            'attention_mask': f['attention_mask'][:10],  # ← ADD
+            'total':          f['audio'].shape[0]
         }
     
 @pytest.fixture(scope="session")

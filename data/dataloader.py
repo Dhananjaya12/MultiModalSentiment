@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 # from transformers import DistilBertTokenizer
-from transformers import RobertaTokenizer
+# from transformers import RobertaTokenizer
 from sklearn.model_selection import train_test_split
 from pathlib import Path
 
@@ -31,7 +31,7 @@ import numpy as np
 # ─────────────────────────────────────────────────────────────────
 
 class MOSEIDataset(Dataset):
-    def __init__(self, hdf5_path: str, indices: list, tokenizer, cfg):
+    def __init__(self, hdf5_path: str, indices: list, cfg):
         """
         hdf5_path : path to mosei_dataset.h5
         indices   : which row indices belong to this split
@@ -40,7 +40,7 @@ class MOSEIDataset(Dataset):
         """
         self.path      = hdf5_path
         self.indices   = indices
-        self.tokenizer = tokenizer
+        # self.tokenizer = tokenizer
         self.file      = None   # opened lazily per worker
         self.cfg = cfg
 
@@ -64,23 +64,26 @@ class MOSEIDataset(Dataset):
         vision = (vision - vision.mean()) / (vision.std() + 1e-8)
         label  = torch.tensor(f['labels'][real_idx], dtype=torch.float)  # scalar
         # label  = torch.tensor(label_to_idx(f['labels'][real_idx]), dtype=torch.long)
-        text   = f['texts'][real_idx]
+        # text   = f['texts'][real_idx]
 
-        if isinstance(text, bytes):
-            text = text.decode('utf-8')
+        # if isinstance(text, bytes):
+        #     text = text.decode('utf-8')
 
-        # Tokenize text
-        enc = self.tokenizer(
-            text,
-            max_length  = self.cfg['max_text_len'],
-            padding     = 'max_length',
-            truncation  = True,
-            return_tensors = 'pt'
-        )
+        # # Tokenize text
+        # enc = self.tokenizer(
+        #     text,
+        #     max_length  = self.cfg['max_text_len'],
+        #     padding     = 'max_length',
+        #     truncation  = True,
+        #     return_tensors = 'pt'
+        # )
+
+        input_ids      = torch.tensor(f['input_ids'][real_idx], dtype=torch.long)
+        attention_mask = torch.tensor(f['attention_mask'][real_idx], dtype=torch.long)  
 
         return {
-            'input_ids':      enc['input_ids'].squeeze(),       # (128,)
-            'attention_mask': enc['attention_mask'].squeeze(),  # (128,)
+            'input_ids':      input_ids,       # (128,)
+            'attention_mask': attention_mask,  # (128,)
             'audio':          audio,                            # (500, 74)
             'vision':         vision,                           # (500, 713)
             'label':          label,                            # scalar
@@ -141,11 +144,11 @@ def get_dataloaders(cfg):
     print(f"  Test  : {len(test_idx)}  samples")
 
     # tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-    tokenizer = RobertaTokenizer.from_pretrained('roberta-large')
+    # tokenizer = RobertaTokenizer.from_pretrained('roberta-large')
     
-    train_dataset = MOSEIDataset(hdf5_path, train_idx, tokenizer, cfg)
-    val_dataset   = MOSEIDataset(hdf5_path, val_idx,   tokenizer, cfg)
-    test_dataset  = MOSEIDataset(hdf5_path, test_idx,  tokenizer, cfg)
+    train_dataset = MOSEIDataset(hdf5_path, train_idx, cfg)
+    val_dataset   = MOSEIDataset(hdf5_path, val_idx, cfg)
+    test_dataset  = MOSEIDataset(hdf5_path, test_idx, cfg)
 
     pin = torch.cuda.is_available()
 
@@ -153,21 +156,21 @@ def get_dataloaders(cfg):
         train_dataset,
         batch_size  = cfg['batch_size'],
         shuffle     = True,
-        num_workers = 0,
+        num_workers = 4,
         pin_memory  = pin
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size  = cfg['batch_size'],
         shuffle     = False,
-        num_workers = 0,
+        num_workers = 4,
         pin_memory  = pin
     )
     test_loader = DataLoader(
         test_dataset,
         batch_size  = cfg['batch_size'],
         shuffle     = False,
-        num_workers = 0,
+        num_workers = 4,
         pin_memory  = pin
     )
 

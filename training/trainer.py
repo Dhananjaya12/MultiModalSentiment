@@ -11,6 +11,7 @@ import math
 import json
 import random
 from tqdm import tqdm
+from torch.cuda.amp import autocast, GradScaler
 
 _DEBUG_LOG = Path("/kaggle/working/debug-e745fb.log")
 
@@ -90,12 +91,12 @@ def apply_modality_dropout(audio, vision, input_ids, attention_mask,
         attention_mask = torch.ones_like(attention_mask)  # ones to avoid transformer crash
     return audio, vision, input_ids, attention_mask
 
-
 def run_one_epoch(model, loader, optimizer=None, is_train: bool = True,
                   use_modality_dropout: bool = False,
                   audio_drop_prob: float = 0.15,
                   vision_drop_prob: float = 0.15,
-                  text_drop_prob: float = 0.05):
+                  text_drop_prob: float = 0.05,
+                  scaler=None):   # ← ADD THIS
     """
     One full pass over the dataset.
     Returns: avg_loss, mae, all_preds, all_labels
@@ -125,14 +126,17 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True,
                     text_drop_prob=text_drop_prob,
                 )
 
-            preds = model(input_ids, attention_mask, audio, vision)
-            loss  = sentiment_loss(preds, labels)
+            with autocast():
+                preds = model(input_ids, attention_mask, audio, vision)
+                loss  = sentiment_loss(preds, labels)
 
             if is_train:
                 optimizer.zero_grad()
-                loss.backward()
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                optimizer.step()
+                scaler.step(optimizer)
+                scaler.update()
 
             total_loss += loss.item() * len(labels)
             all_preds.extend(preds.detach().cpu().numpy())
@@ -242,6 +246,8 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
         print(f'Mod dropout : {use_mod_dropout} '
               f'(audio={audio_drop_prob} vision={vision_drop_prob} text={text_drop_prob})\n')
 
+        scaler = GradScaler()
+
         for epoch in range(start_epoch, cfg['num_epochs']):
 
             train_loss, train_mae, _, _ = run_one_epoch(
@@ -251,10 +257,12 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
                 audio_drop_prob=audio_drop_prob,
                 vision_drop_prob=vision_drop_prob,
                 text_drop_prob=text_drop_prob,
+                scaler=scaler,
             )
             val_loss, _, val_preds, val_labels = run_one_epoch(
                 model, val_loader, is_train=False,
                 use_modality_dropout=False,  # never drop during val
+                scaler=None,
             )
 
             # ── Debug prints ──────────────────────────────────────
