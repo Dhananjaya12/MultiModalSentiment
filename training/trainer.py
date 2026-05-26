@@ -109,7 +109,7 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True,
 
     total_loss = 0.0
     all_preds, all_labels = [], []
-    import time
+    # import time
     data_time  = 0.0
     model_time = 0.0
     batch_count = 0
