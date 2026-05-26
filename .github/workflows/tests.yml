@@ -40,7 +40,7 @@ jobs:
             "dataset":           "meld",
             "audio_dim":         768,
             "vision_dim":        512,
-            "text_dim":          1024,
+            "text_dim":          768,
             "seq_len":           300,
             "max_text_len":      128,
             "d_model":           128,

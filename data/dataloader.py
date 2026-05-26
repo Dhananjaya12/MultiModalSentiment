@@ -8,6 +8,53 @@ import time
 
 
 class MOSEIDataset(Dataset):
+    # def __init__(self, hdf5_path: str, indices: list, cfg):
+    #     """
+    #     Loads entire split into RAM at init time.
+    #     After loading, __getitem__ serves from RAM — no disk reads during training.
+    #     """
+    #     self.indices = indices
+    #     self.cfg     = cfg
+
+    #     print(f'  Loading {len(indices)} samples into RAM...')
+    #     t = time.time()
+
+    #     sorted_idx = sorted(indices)
+
+    #     with h5py.File(hdf5_path, 'r') as f:
+    #         self.audio          = f['audio']         [sorted_idx]
+    #         self.vision         = f['vision']        [sorted_idx]
+    #         self.labels         = f['labels']        [sorted_idx]
+    #         self.input_ids      = f['input_ids']     [sorted_idx]
+    #         self.attention_mask = f['attention_mask'][sorted_idx]
+
+        
+    #     # Map original index → position in loaded arrays
+    #     self.idx_map = {orig: new for new, orig in enumerate(sorted_idx)}
+    #     print(f'  ✅ Loaded into RAM in {time.time()-t:.1f}s  '
+    #           f'({self.audio.nbytes/1024**3:.1f}GB audio + '
+    #           f'{self.vision.nbytes/1024**3:.1f}GB vision)')
+
+    # def __len__(self):
+    #     return len(self.indices)
+
+    # def __getitem__(self, idx):
+    #     i      = self.idx_map[self.indices[idx]]
+    #     audio  = torch.tensor(self.audio[i],  dtype=torch.float32)
+    #     vision = torch.tensor(self.vision[i], dtype=torch.float32)
+
+    #     # Normalize per sample — same as before
+    #     audio  = (audio  - audio.mean())  / (audio.std()  + 1e-8)
+    #     vision = (vision - vision.mean()) / (vision.std() + 1e-8)
+
+    #     return {
+    #         'input_ids':      torch.tensor(self.input_ids[i],      dtype=torch.long),
+    #         'attention_mask': torch.tensor(self.attention_mask[i], dtype=torch.long),
+    #         'audio':          audio,
+    #         'vision':         vision,
+    #         'label':          torch.tensor(self.labels[i],         dtype=torch.float32),
+    #     }
+
     def __init__(self, hdf5_path: str, indices: list, cfg):
         """
         Loads entire split into RAM at init time.
@@ -103,30 +150,36 @@ def get_dataloaders(cfg):
     t_train_loader_init_start = time.time()
     train_loader = DataLoader(
         train_dataset,
-        batch_size  = cfg['batch_size'],
-        shuffle     = True,
-        num_workers = 0,      # 0 — data in RAM, workers add overhead
-        pin_memory  = pin,
+        batch_size = cfg['batch_size'],
+        shuffle = True,
+        num_workers = 4,
+        pin_memory = pin,
+        persistent_workers = True,
+
     )
     t_train_loader_init_end = time.time()
     print(f'Train DataLoader initialization time: {t_train_loader_init_end - t_train_loader_init_start:.2f} seconds\n')
     t_val_loader_init_start = time.time()
     val_loader = DataLoader(
         val_dataset,
-        batch_size  = cfg['batch_size'],
-        shuffle     = False,
-        num_workers = 0,
-        pin_memory  = pin,
+        batch_size = cfg['batch_size'],
+        shuffle = False,
+        num_workers = 4,
+        pin_memory = pin,
+        persistent_workers = True,
+
     )
     t_val_loader_init_end = time.time()
     print(f'Validation DataLoader initialization time: {t_val_loader_init_end - t_val_loader_init_start:.2f} seconds\n')
     t_test_loader_init_start = time.time()
     test_loader = DataLoader(
         test_dataset,
-        batch_size  = cfg['batch_size'],
-        shuffle     = False,
-        num_workers = 0,
-        pin_memory  = pin,
+        batch_size = cfg['batch_size'],
+        shuffle = False,
+        num_workers = 4,
+        pin_memory = pin,
+        persistent_workers = True,
+
     )
     t_test_loader_init_end = time.time()
     print(f'Test DataLoader initialization time: {t_test_loader_init_end - t_test_loader_init_start:.2f} seconds\n')

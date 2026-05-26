@@ -90,11 +90,13 @@ class TransformerFusionModel(nn.Module):
 
         # Text backbone — RoBERTa-large
         t_roberta_start = time.time()
-        self.roberta = RobertaModel.from_pretrained('roberta-large')
+        # self.roberta = RobertaModel.from_pretrained('roberta-large')
+        self.roberta = RobertaModel.from_pretrained('roberta-base')
 
         # Freeze all layers except last 2
         for name, param in self.roberta.named_parameters():
-            if 'encoder.layer.23' in name or 'encoder.layer.22' in name:
+            # if 'encoder.layer.23' in name or 'encoder.layer.22' in name:
+            if 'encoder.layer.11' in name or 'encoder.layer.10' in name:
                 param.requires_grad = True
             else:
                 param.requires_grad = False
