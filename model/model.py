@@ -5,6 +5,7 @@ from transformers import RobertaModel
 
 from model.encoders import ModalityEncoder
 from model.fusion import CrossModalFusion
+import time
 
 
 
@@ -88,6 +89,7 @@ class TransformerFusionModel(nn.Module):
         #         param.requires_grad = False   # freeze everything else
 
         # Text backbone — RoBERTa-large
+        t_roberta_start = time.time()
         self.roberta = RobertaModel.from_pretrained('roberta-large')
 
         # Freeze all layers except last 2
@@ -107,6 +109,8 @@ class TransformerFusionModel(nn.Module):
 
         # Stage 3: regression head
         self.regressor = SentimentRegressor(self.cfg)
+        t_roberta_end = time.time()
+        print(f'RoBERTa loading time: {t_roberta_end - t_roberta_start:.2f} seconds\n')
 
 
     def forward(self, input_ids, attention_mask,
