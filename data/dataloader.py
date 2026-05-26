@@ -57,49 +57,36 @@ class MOSEIDataset(Dataset):
 
     def __init__(self, hdf5_path: str, indices: list, cfg):
         """
-        Loads entire split into RAM at init time.
-        After loading, __getitem__ serves from RAM — no disk reads during training.
+        Stores indices only. Reads from HDF5 on demand in __getitem__.
+        One HDF5 file handle opened per worker (lazy init).
         """
-        self.indices = indices
-        self.cfg     = cfg
-
-        print(f'  Loading {len(indices)} samples into RAM...')
-        t = time.time()
-
-        sorted_idx = sorted(indices)
-
-        with h5py.File(hdf5_path, 'r') as f:
-            self.audio          = f['audio']         [sorted_idx]
-            self.vision         = f['vision']        [sorted_idx]
-            self.labels         = f['labels']        [sorted_idx]
-            self.input_ids      = f['input_ids']     [sorted_idx]
-            self.attention_mask = f['attention_mask'][sorted_idx]
-
-        
-        # Map original index → position in loaded arrays
-        self.idx_map = {orig: new for new, orig in enumerate(sorted_idx)}
-        print(f'  ✅ Loaded into RAM in {time.time()-t:.1f}s  '
-              f'({self.audio.nbytes/1024**3:.1f}GB audio + '
-              f'{self.vision.nbytes/1024**3:.1f}GB vision)')
+        self.hdf5_path = str(hdf5_path)
+        self.indices   = indices
+        self.cfg       = cfg
+        self._file     = None
+        print(f'  Dataset ready: {len(indices)} samples (HDF5 on-demand loading)')
 
     def __len__(self):
         return len(self.indices)
 
     def __getitem__(self, idx):
-        i      = self.idx_map[self.indices[idx]]
-        audio  = torch.tensor(self.audio[i],  dtype=torch.float32)
-        vision = torch.tensor(self.vision[i], dtype=torch.float32)
+        if self._file is None:
+            self._file = h5py.File(self.hdf5_path, 'r')
+
+        i      = self.indices[idx]
+        audio  = torch.from_numpy(self._file['audio'][i].copy()).float()
+        vision = torch.from_numpy(self._file['vision'][i].copy()).float()
 
         # Normalize per sample — same as before
         audio  = (audio  - audio.mean())  / (audio.std()  + 1e-8)
         vision = (vision - vision.mean()) / (vision.std() + 1e-8)
 
         return {
-            'input_ids':      torch.tensor(self.input_ids[i],      dtype=torch.long),
-            'attention_mask': torch.tensor(self.attention_mask[i], dtype=torch.long),
+            'input_ids':      torch.from_numpy(self._file['input_ids'][i].copy()).long(),
+            'attention_mask': torch.from_numpy(self._file['attention_mask'][i].copy()).long(),
             'audio':          audio,
             'vision':         vision,
-            'label':          torch.tensor(self.labels[i],         dtype=torch.float32),
+            'label':          torch.tensor(float(self._file['labels'][i]), dtype=torch.float32),
         }
 
 
