@@ -89,7 +89,7 @@ class TransformerFusionModel(nn.Module):
         #         param.requires_grad = False   # freeze everything else
 
         # Text backbone — RoBERTa-large
-        t_roberta_start = time.time()
+        # t_roberta_start = time.time()
         # self.roberta = RobertaModel.from_pretrained('roberta-large')
         self.roberta = RobertaModel.from_pretrained('roberta-base')
 
@@ -111,8 +111,8 @@ class TransformerFusionModel(nn.Module):
 
         # Stage 3: regression head
         self.regressor = SentimentRegressor(self.cfg)
-        t_roberta_end = time.time()
-        print(f'RoBERTa loading time: {t_roberta_end - t_roberta_start:.2f} seconds\n')
+        # t_roberta_end = time.time()
+        # print(f'RoBERTa loading time: {t_roberta_end - t_roberta_start:.2f} seconds\n')
 
 
     def forward(self, input_ids, attention_mask,

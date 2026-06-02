@@ -14,7 +14,7 @@ from tqdm import tqdm
 from torch.cuda.amp import autocast, GradScaler
 import time
 
-_DEBUG_LOG = Path("/kaggle/working/debug-e745fb.log")
+_DEBUG_LOG = Path("/content/drive/MyDrive/UNT OneDrive Backup/Backup folder/Backup folder/Projects/MultiModalSentimentGithub/output/debug-e745fb.log")
 
 MELD_LABEL_VALUES   = np.array([-1., 0., 1.], dtype=np.float32)
 MOSEI_LABEL_VALUES  = np.array([
@@ -58,21 +58,15 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #     return mae + 0.5 * mse + 0.3 * corr
 
 def sentiment_loss(preds, targets):
-    # Class weights to handle MELD imbalance
-    # neutral=47% → weight 0.6, negative=29% → weight 1.0, positive=23% → weight 1.2
     weights = torch.ones_like(targets)
     weights[targets == -1.0] = 1.0
     weights[targets ==  0.0] = 0.6
     weights[targets ==  1.0] = 1.2
-    weights = weights / weights.mean()  # normalize
+    weights = weights / weights.mean()
 
-    mae     = (torch.abs(preds - targets) * weights).mean()
-    mse     = ((preds - targets)**2 * weights).mean()
-    preds_c = preds   - preds.mean()
-    tgt_c   = targets - targets.mean()
-    corr    = -((preds_c * tgt_c).mean() /
-                (preds.std().clamp(min=1e-8) * targets.std().clamp(min=1e-8)))
-    return mae + 0.5 * mse + 0.3 * corr
+    mae = (torch.abs(preds - targets) * weights).mean()
+    mse = ((preds - targets)**2 * weights).mean()
+    return mae + 0.5 * mse
 
 
 def apply_modality_dropout(audio, vision, input_ids, attention_mask,
@@ -102,16 +96,16 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True,
     One full pass over the dataset.
     Returns: avg_loss, mae, all_preds, all_labels
     """
-    t_model_mode_start = time.time()
+    # t_model_mode_start = time.time()
     model.train() if is_train else model.eval()
-    t_model_mode_end = time.time()
-    print(f'Model set to {"train" if is_train else "eval"} mode in {t_model_mode_end - t_model_mode_start:.2f} seconds\n')
+    # t_model_mode_end = time.time()
+    # print(f'Model set to {"train" if is_train else "eval"} mode in {t_model_mode_end - t_model_mode_start:.2f} seconds\n')
 
     total_loss = 0.0
     all_preds, all_labels = [], []
     # import time
-    data_time  = 0.0
-    model_time = 0.0
+    # data_time  = 0.0
+    # model_time = 0.0
     batch_count = 0
 
     context = torch.enable_grad() if is_train else torch.no_grad()
@@ -120,59 +114,59 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True,
         for batch in tqdm(loader, desc=f'{"Train" if is_train else "Val  "}',
                           leave=False, unit='batch'):
 
-            t0 = time.time()
+            # t0 = time.time()
             input_ids      = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
             audio          = batch['audio'].to(device)
             vision         = batch['vision'].to(device)
             labels         = batch['label'].to(device)
-            data_time += time.time() - t0
+            # data_time += time.time() - t0
 
-            t1 = time.time()
+            # t1 = time.time()
             if is_train and use_modality_dropout:
-                t_mod_dropout_start = time.time()
+                # t_mod_dropout_start = time.time()
                 audio, vision, input_ids, attention_mask = apply_modality_dropout(
                     audio, vision, input_ids, attention_mask,
                     audio_drop_prob=audio_drop_prob,
                     vision_drop_prob=vision_drop_prob,
                     text_drop_prob=text_drop_prob,
                 )
-                t_mod_dropout_end = time.time()
-                print(f'  Modality dropout applied in {t_mod_dropout_end - t_mod_dropout_start:.2f} seconds')
+                # t_mod_dropout_end = time.time()
+                # print(f'  Modality dropout applied in {t_mod_dropout_end - t_mod_dropout_start:.2f} seconds')
             
             with autocast():
-                t_model_preds_start = time.time()
+                # t_model_preds_start = time.time()
                 preds = model(input_ids, attention_mask, audio, vision)
-                t_model_preds_end = time.time()
-                print(f'  Model predictions time: {t_model_preds_end - t_model_preds_start:.2f} seconds')
-                t_loss_start = time.time()
+                # t_model_preds_end = time.time()
+                # print(f'  Model predictions time: {t_model_preds_end - t_model_preds_start:.2f} seconds')
+                # t_loss_start = time.time()
                 loss  = sentiment_loss(preds, labels)
-                t_loss_end = time.time()
-                print(f'  Loss computation time: {t_loss_end - t_loss_start:.2f} seconds')
+                # t_loss_end = time.time()
+                # print(f'  Loss computation time: {t_loss_end - t_loss_start:.2f} seconds')
 
             if is_train:
-                t_optimizer_start = time.time()
+                # t_optimizer_start = time.time()
                 optimizer.zero_grad()
-                t_optimizer_end = time.time()
-                print(f'  Optimizer zero_grad time: {t_optimizer_end - t_optimizer_start:.2f} seconds')
-                t_backward_start = time.time()
+                # t_optimizer_end = time.time()
+                # print(f'  Optimizer zero_grad time: {t_optimizer_end - t_optimizer_start:.2f} seconds')
+                # t_backward_start = time.time()
                 scaler.scale(loss).backward()
-                t_backward_end = time.time()
-                print(f'  Backward pass time: {t_backward_end - t_backward_start:.2f} seconds')
-                t_optimizer_step_start = time.time()
+                # t_backward_end = time.time()
+                # print(f'  Backward pass time: {t_backward_end - t_backward_start:.2f} seconds')
+                # t_optimizer_step_start = time.time()
                 scaler.unscale_(optimizer)
-                t_optimizer_step_end = time.time()
-                print(f'  Optimizer step preparation time: {t_optimizer_step_end - t_optimizer_step_start:.2f} seconds')
-                t_clip_start = time.time()
+                # t_optimizer_step_end = time.time()
+                # print(f'  Optimizer step preparation time: {t_optimizer_step_end - t_optimizer_step_start:.2f} seconds')
+                # t_clip_start = time.time()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                t_clip_end = time.time()
-                print(f'  Gradient clipping time: {t_clip_end - t_clip_start:.2f} seconds')
-                t_optimizer_step_start = time.time()
+                # t_clip_end = time.time()
+                # print(f'  Gradient clipping time: {t_clip_end - t_clip_start:.2f} seconds')
+                # t_optimizer_step_start = time.time()
                 scaler.step(optimizer)
-                t_optimizer_step_end = time.time()
-                print(f'  Optimizer step time: {t_optimizer_step_end - t_optimizer_step_start:.2f} seconds')
+                # t_optimizer_step_end = time.time()
+                # print(f'  Optimizer step time: {t_optimizer_step_end - t_optimizer_step_start:.2f} seconds')
                 scaler.update()
-            model_time += time.time() - t1
+            # model_time += time.time() - t1
 
             total_loss += loss.item() * len(labels)
             all_preds.extend(preds.detach().cpu().numpy())
@@ -181,8 +175,8 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True,
             batch_count += 1
             if batch_count == 3:
                 print(f'\n  [Timing after 3 batches]')
-                print(f'  Data loading : {data_time:.2f}s  ({data_time/batch_count:.2f}s/batch)')
-                print(f'  Model forward: {model_time:.2f}s  ({model_time/batch_count:.2f}s/batch)')
+                # print(f'  Data loading : {data_time:.2f}s  ({data_time/batch_count:.2f}s/batch)')
+                # print(f'  Model forward: {model_time:.2f}s  ({model_time/batch_count:.2f}s/batch)')
 
     avg_loss  = total_loss / len(loader.dataset)
     preds_np  = np.array(all_preds)
@@ -199,7 +193,7 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
     resume_from: explicit path to checkpoint.pt.
                  If None — auto-detects checkpoint.pt next to model_save_path.
     """
-
+    mlflow.set_tracking_uri('/content/drive/MyDrive/UNT OneDrive Backup/Backup folder/Backup folder/Projects/MultiModalSentimentGithub/output/mlruns')
     mlflow.set_experiment("mosei-multimodal-sentiment")
 
     with mlflow.start_run(run_name="transformer_fusion"):
@@ -224,13 +218,13 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
             "text_drop_prob":   cfg.get('text_drop_prob',   0.05),
         })
         
-        t_model_loading_start = time.time()
+        # t_model_loading_start = time.time()
         model = model.to(device)
-        t_model_loading_end = time.time()
-        print(f'Model loading time: {t_model_loading_end - t_model_loading_start:.2f} seconds\n')
+        # t_model_loading_end = time.time()
+        # print(f'Model loading time: {t_model_loading_end - t_model_loading_start:.2f} seconds\n')
 
 
-        t_optimizer_init_start = time.time()
+        # t_optimizer_init_start = time.time()
         optimizer = optim.AdamW([
             {'params': [p for p in model.roberta.parameters() if p.requires_grad], 'lr': 2e-5},
             {'params': model.audio_encoder.parameters(),  'lr': cfg['learning_rate']},
@@ -239,8 +233,8 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
             {'params': model.fusion.parameters(),         'lr': cfg['learning_rate']},
             {'params': model.regressor.parameters(),      'lr': cfg['learning_rate']},
         ], weight_decay=cfg['weight_decay'])
-        t_optimizer_init_end = time.time()
-        print(f'Optimizer initialization time: {t_optimizer_init_end - t_optimizer_init_start:.2f} seconds\n')
+        # t_optimizer_init_end = time.time()
+        # print(f'Optimizer initialization time: {t_optimizer_init_end - t_optimizer_init_start:.2f} seconds\n')
 
         def warmup_cosine(epoch):
             warmup_epochs = 2
@@ -298,7 +292,7 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
         scaler = GradScaler()
 
         for epoch in range(start_epoch, cfg['num_epochs']):
-            t_epoch_training_start = time.time()
+            # t_epoch_training_start = time.time()
             train_loss, train_mae, _, _ = run_one_epoch(
                 model, train_loader, optimizer,
                 is_train=True,
@@ -308,19 +302,19 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
                 text_drop_prob=text_drop_prob,
                 scaler=scaler,
             )
-            t_epoch_training_end = time.time()
-            print(f'Epoch {epoch+1} training time: {t_epoch_training_end - t_epoch_training_start:.2f} seconds\n')
-            t_epoch_val_start = time.time()
+            # t_epoch_training_end = time.time()
+            # print(f'Epoch {epoch+1} training time: {t_epoch_training_end - t_epoch_training_start:.2f} seconds\n')
+            # t_epoch_val_start = time.time()
             val_loss, _, val_preds, val_labels = run_one_epoch(
                 model, val_loader, is_train=False,
                 use_modality_dropout=False,  # never drop during val
                 scaler=None,
             )
-            t_epoch_val_end = time.time()
-            print(f'Epoch {epoch+1} validation time: {t_epoch_val_end - t_epoch_val_start:.2f} seconds\n')
+            # t_epoch_val_end = time.time()
+            # print(f'Epoch {epoch+1} validation time: {t_epoch_val_end - t_epoch_val_start:.2f} seconds\n')
 
             # ── Debug prints ──────────────────────────────────────
-            t_debug_start = time.time()
+            # t_debug_start = time.time()
             print(f'Raw preds — min:{val_preds.min():.4f} max:{val_preds.max():.4f} std:{val_preds.std():.4f}')
             val_preds_snapped = snap_to_valid(val_preds, dataset=cfg.get('dataset', 'mosei'))
             print(f'Snapped preds unique: {np.unique(val_preds_snapped, return_counts=True)}')
@@ -351,7 +345,7 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
                     "location":     "training/trainer.py:train.loop",
                     "message":      "val continuous vs snapped",
                     "data": {
-                        "epoch":        int(epoch),
+                        "epoch":        int(epoch + 1),
                         "val_mae_raw":  float(val_mae_raw),
                         "val_mae_snap": float(val_mae_snap),
                         "val_corr_raw": float(val_corr_raw),
@@ -365,11 +359,11 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
                     _lf.write(json.dumps(_payload) + "\n")
             except Exception:
                 pass
-            t_debug_end = time.time()
-            print(f'Debug logging time: {t_debug_end - t_debug_start:.2f} seconds\n')
+            # t_debug_end = time.time()
+            # print(f'Debug logging time: {t_debug_end - t_debug_start:.2f} seconds\n')
 
             scheduler.step()
-            t_epoch_mlflow_start = time.time()
+            # t_epoch_mlflow_start = time.time()
             history['train_loss'].append(train_loss)
             history['train_mae'].append(train_mae)
             history['val_loss'].append(val_loss)
@@ -420,8 +414,8 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
                 'history':         history,
             }, ckpt_path)
             print(f'  💾 Checkpoint saved (epoch {epoch+1})')
-            t_epoch_mlflow_end = time.time()
-            print(f'Epoch {epoch+1} MLflow logging time: {t_epoch_mlflow_end - t_epoch_mlflow_start:.2f} seconds\n')
+            # t_epoch_mlflow_end = time.time()
+            # print(f'Epoch {epoch+1} MLflow logging time: {t_epoch_mlflow_end - t_epoch_mlflow_start:.2f} seconds\n')
 
         # ── Final MLflow logging ──────────────────────────────────
         mlflow.log_metrics({
@@ -431,7 +425,7 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
 
         mlflow.log_artifact(str(save_path))
 
-        config_save_path = "/kaggle/working/config.json"
+        config_save_path = "/content/drive/MyDrive/UNT OneDrive Backup/Backup folder/Backup folder/Projects/MultiModalSentimentGithub/output/config.json"
         with open(config_save_path, "w") as f:
             json.dump(cfg, f, indent=4)
         mlflow.log_artifact(config_save_path)

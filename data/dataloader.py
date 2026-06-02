@@ -119,22 +119,22 @@ def get_dataloaders(cfg):
     print(f'  Test  : {len(test_idx)} samples')
 
 
-    t_train_dataset_init_start = time.time()
+    # t_train_dataset_init_start = time.time()
     train_dataset = MOSEIDataset(hdf5_path, train_idx, cfg)
-    t_train_dataset_init_end = time.time()
-    print(f'Train dataset initialization time: {t_train_dataset_init_end - t_train_dataset_init_start:.2f} seconds\n')
-    t_val_dataset_init_start = time.time()
+    # t_train_dataset_init_end = time.time()
+    # print(f'Train dataset initialization time: {t_train_dataset_init_end - t_train_dataset_init_start:.2f} seconds\n')
+    # t_val_dataset_init_start = time.time()
     val_dataset   = MOSEIDataset(hdf5_path, val_idx,   cfg)
-    t_val_dataset_init_end = time.time()
-    print(f'Validation dataset initialization time: {t_val_dataset_init_end - t_val_dataset_init_start:.2f} seconds\n')
-    t_test_dataset_init_start = time.time()
+    # t_val_dataset_init_end = time.time()
+    # print(f'Validation dataset initialization time: {t_val_dataset_init_end - t_val_dataset_init_start:.2f} seconds\n')
+    # t_test_dataset_init_start = time.time()
     test_dataset  = MOSEIDataset(hdf5_path, test_idx,  cfg)
-    t_test_dataset_init_end = time.time()
-    print(f'Test dataset initialization time: {t_test_dataset_init_end - t_test_dataset_init_start:.2f} seconds\n')
+    # t_test_dataset_init_end = time.time()
+    # print(f'Test dataset initialization time: {t_test_dataset_init_end - t_test_dataset_init_start:.2f} seconds\n')
 
     pin = torch.cuda.is_available()
 
-    t_train_loader_init_start = time.time()
+    # t_train_loader_init_start = time.time()
     train_loader = DataLoader(
         train_dataset,
         batch_size = cfg['batch_size'],
@@ -144,9 +144,9 @@ def get_dataloaders(cfg):
         persistent_workers = True,
 
     )
-    t_train_loader_init_end = time.time()
-    print(f'Train DataLoader initialization time: {t_train_loader_init_end - t_train_loader_init_start:.2f} seconds\n')
-    t_val_loader_init_start = time.time()
+    # t_train_loader_init_end = time.time()
+    # print(f'Train DataLoader initialization time: {t_train_loader_init_end - t_train_loader_init_start:.2f} seconds\n')
+    # t_val_loader_init_start = time.time()
     val_loader = DataLoader(
         val_dataset,
         batch_size = cfg['batch_size'],
@@ -156,9 +156,9 @@ def get_dataloaders(cfg):
         persistent_workers = True,
 
     )
-    t_val_loader_init_end = time.time()
-    print(f'Validation DataLoader initialization time: {t_val_loader_init_end - t_val_loader_init_start:.2f} seconds\n')
-    t_test_loader_init_start = time.time()
+    # t_val_loader_init_end = time.time()
+    # print(f'Validation DataLoader initialization time: {t_val_loader_init_end - t_val_loader_init_start:.2f} seconds\n')
+    # t_test_loader_init_start = time.time()
     test_loader = DataLoader(
         test_dataset,
         batch_size = cfg['batch_size'],
@@ -168,7 +168,7 @@ def get_dataloaders(cfg):
         persistent_workers = True,
 
     )
-    t_test_loader_init_end = time.time()
-    print(f'Test DataLoader initialization time: {t_test_loader_init_end - t_test_loader_init_start:.2f} seconds\n')
+    # t_test_loader_init_end = time.time()
+    # print(f'Test DataLoader initialization time: {t_test_loader_init_end - t_test_loader_init_start:.2f} seconds\n')
 
     return train_loader, val_loader, test_loader

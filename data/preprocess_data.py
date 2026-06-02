@@ -160,7 +160,7 @@ for vid in tqdm(keys):
         total += 1
         
         if len(batch_labels) >= 100:
-            start_time = time.time()
+            # start_time = time.time()
             print(f'Flushing batch to HDF5... (total so far: {total})')
 
             flush_to_hdf5(HDF5_PATH, batch_audio, batch_vision,
@@ -173,7 +173,7 @@ for vid in tqdm(keys):
             batch_labels.clear()
             batch_ids.clear()
 
-            print(f"Flush took {time.time() - start_time:.4f} seconds")
+            # print(f"Flush took {time.time() - start_time:.4f} seconds")
 
 # ── Final flush (same as your final execute_batch) ────────────────
 if batch_labels:

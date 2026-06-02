@@ -182,3 +182,7 @@ cython_debug/
 
 data/*.json
 tests/fixtures/
+
+output*/
+data/*.h5
+multimodal-sentiment-*.json
