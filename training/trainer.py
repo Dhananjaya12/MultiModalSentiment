@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
+import h5py
 from scipy.stats import pearsonr
 from pathlib import Path
 import mlflow
@@ -13,6 +15,8 @@ import random
 from tqdm import tqdm
 from torch.cuda.amp import autocast, GradScaler
 import time
+
+CLASS_NAMES = ['negative', 'neutral', 'positive']  # class idx 0,1,2 <-> label -1,0,1
 
 _DEBUG_LOG = Path("/content/drive/MyDrive/UNT OneDrive Backup/Backup folder/Backup folder/Projects/MultiModalSentimentGithub/output/debug-e745fb.log")
 
@@ -57,16 +61,53 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #                 (preds.std().clamp(min=1e-8) * targets.std().clamp(min=1e-8)))
 #     return mae + 0.5 * mse + 0.3 * corr
 
-def sentiment_loss(preds, targets):
-    weights = torch.ones_like(targets)
-    weights[targets == -1.0] = 1.0
-    weights[targets ==  0.0] = 0.6
-    weights[targets ==  1.0] = 1.2
-    weights = weights / weights.mean()
+def sentiment_loss(logits, class_idx, class_weights=None):
+    """Cross-entropy over the 3 sentiment classes (negative/neutral/positive)."""
+    return F.cross_entropy(logits, class_idx, weight=class_weights)
 
-    mae = (torch.abs(preds - targets) * weights).mean()
-    mse = ((preds - targets)**2 * weights).mean()
-    return mae + 0.5 * mse
+
+def labels_to_class_idx(labels: torch.Tensor) -> torch.Tensor:
+    """MELD labels are exactly -1./0./1. -> class indices 0/1/2."""
+    return (labels + 1.0).round().long()
+
+
+def compute_class_weights(loader, num_classes: int = 3) -> torch.Tensor:
+    """Inverse-frequency class weights computed from a dataloader's underlying labels."""
+    dataset = loader.dataset
+    with h5py.File(dataset.hdf5_path, 'r') as f:
+        labels = f['labels'][sorted(dataset.indices)]
+    class_idx = np.clip(np.round(labels + 1.0), 0, num_classes - 1).astype(int)
+    counts  = np.bincount(class_idx, minlength=num_classes).astype(np.float32)
+    weights = counts.sum() / (num_classes * counts)
+    return torch.tensor(weights, dtype=torch.float32)
+
+
+def compute_classification_metrics(preds: np.ndarray, labels: np.ndarray, num_classes: int = 3) -> dict:
+    """Accuracy, per-class precision/recall/F1, macro F1, and confusion matrix."""
+    cm = np.zeros((num_classes, num_classes), dtype=int)
+    for p, l in zip(preds, labels):
+        cm[l, p] += 1
+
+    precisions, recalls, f1s = [], [], []
+    for c in range(num_classes):
+        tp = cm[c, c]
+        fp = cm[:, c].sum() - tp
+        fn = cm[c, :].sum() - tp
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall    = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1        = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+        precisions.append(precision)
+        recalls.append(recall)
+        f1s.append(f1)
+
+    return {
+        'accuracy':         float(np.trace(cm) / cm.sum()),
+        'precision':        precisions,
+        'recall':           recalls,
+        'f1':               f1s,
+        'f1_macro':         float(np.mean(f1s)),
+        'confusion_matrix': cm,
+    }
 
 
 def apply_modality_dropout(audio, vision, input_ids, attention_mask,
@@ -91,10 +132,11 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True,
                   audio_drop_prob: float = 0.15,
                   vision_drop_prob: float = 0.15,
                   text_drop_prob: float = 0.05,
-                  scaler=None):
+                  scaler=None,
+                  class_weights=None):
     """
     One full pass over the dataset.
-    Returns: avg_loss, mae, all_preds, all_labels
+    Returns: avg_loss, accuracy, all_preds (class idx), all_labels (class idx)
     """
     # t_model_mode_start = time.time()
     model.train() if is_train else model.eval()
@@ -120,6 +162,7 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True,
             audio          = batch['audio'].to(device)
             vision         = batch['vision'].to(device)
             labels         = batch['label'].to(device)
+            class_idx      = labels_to_class_idx(labels)
             # data_time += time.time() - t0
 
             # t1 = time.time()
@@ -140,7 +183,7 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True,
                 # t_model_preds_end = time.time()
                 # print(f'  Model predictions time: {t_model_preds_end - t_model_preds_start:.2f} seconds')
                 # t_loss_start = time.time()
-                loss  = sentiment_loss(preds, labels)
+                loss  = sentiment_loss(preds, class_idx, class_weights)
                 # t_loss_end = time.time()
                 # print(f'  Loss computation time: {t_loss_end - t_loss_start:.2f} seconds')
 
@@ -169,8 +212,9 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True,
             # model_time += time.time() - t1
 
             total_loss += loss.item() * len(labels)
-            all_preds.extend(preds.detach().cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
+            pred_classes = preds.detach().argmax(dim=1)
+            all_preds.extend(pred_classes.cpu().numpy())
+            all_labels.extend(class_idx.cpu().numpy())
 
             batch_count += 1
             if batch_count == 3:
@@ -181,9 +225,9 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True,
     avg_loss  = total_loss / len(loader.dataset)
     preds_np  = np.array(all_preds)
     labels_np = np.array(all_labels)
-    mae       = np.mean(np.abs(preds_np - labels_np))
+    accuracy  = np.mean(preds_np == labels_np)
 
-    return avg_loss, mae, preds_np, labels_np
+    return avg_loss, accuracy, preds_np, labels_np
 
 
 def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
@@ -250,14 +294,17 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
         ckpt_path  = save_path.parent / 'checkpoint.pt'
         save_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # ── Class weights (inverse frequency, from train split) ────
+        class_weights = compute_class_weights(train_loader).to(device)
+        print(f'Class weights [negative, neutral, positive]: {class_weights.tolist()}')
+
         # ── Resume logic ──────────────────────────────────────────
-        start_epoch      = 0
-        best_val_mae_raw = float('inf')
-        no_improve       = 0
-        history          = {
-            'train_loss': [], 'train_mae': [],
-            'val_loss':   [], 'val_mae':   [], 'val_corr': [],
-            'val_mae_snap': [], 'val_corr_snap': [],
+        start_epoch   = 0
+        best_val_f1   = -1.0
+        no_improve    = 0
+        history       = {
+            'train_loss': [], 'train_acc': [],
+            'val_loss':   [], 'val_acc':   [], 'val_f1_macro': [],
         }
 
         resume_path = Path(resume_from) if resume_from else ckpt_path
@@ -267,12 +314,12 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
             model.load_state_dict(ckpt['model_state'])
             optimizer.load_state_dict(ckpt['optimizer_state'])
             scheduler.load_state_dict(ckpt['scheduler_state'])
-            start_epoch      = ckpt['epoch'] + 1
-            best_val_mae_raw = ckpt['best_val_mae_raw']
-            no_improve       = ckpt['no_improve']
-            history          = ckpt['history']
+            start_epoch = ckpt['epoch'] + 1
+            best_val_f1 = ckpt['best_val_f1']
+            no_improve  = ckpt['no_improve']
+            history     = ckpt['history']
             print(f'  ✅ Resumed from epoch {start_epoch} | '
-                  f'best_val_mae={best_val_mae_raw:.4f} | '
+                  f'best_val_f1_macro={best_val_f1:.4f} | '
                   f'no_improve={no_improve}/{cfg.get("patience", 8)}')
         else:
             print('🆕 Starting fresh training...')
@@ -293,7 +340,7 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
 
         for epoch in range(start_epoch, cfg['num_epochs']):
             # t_epoch_training_start = time.time()
-            train_loss, train_mae, _, _ = run_one_epoch(
+            train_loss, train_acc, _, _ = run_one_epoch(
                 model, train_loader, optimizer,
                 is_train=True,
                 use_modality_dropout=use_mod_dropout,
@@ -301,14 +348,16 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
                 vision_drop_prob=vision_drop_prob,
                 text_drop_prob=text_drop_prob,
                 scaler=scaler,
+                class_weights=class_weights,
             )
             # t_epoch_training_end = time.time()
             # print(f'Epoch {epoch+1} training time: {t_epoch_training_end - t_epoch_training_start:.2f} seconds\n')
             # t_epoch_val_start = time.time()
-            val_loss, _, val_preds, val_labels = run_one_epoch(
+            val_loss, val_acc, val_preds, val_labels = run_one_epoch(
                 model, val_loader, is_train=False,
                 use_modality_dropout=False,  # never drop during val
                 scaler=None,
+                class_weights=class_weights,
             )
             # t_epoch_val_end = time.time()
             # print(f'Epoch {epoch+1} validation time: {t_epoch_val_end - t_epoch_val_start:.2f} seconds\n')
@@ -364,38 +413,47 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
 
             scheduler.step()
             # t_epoch_mlflow_start = time.time()
+
+            cls_metrics = compute_classification_metrics(val_preds, val_labels, num_classes=3)
+
             history['train_loss'].append(train_loss)
-            history['train_mae'].append(train_mae)
+            history['train_acc'].append(train_acc)
             history['val_loss'].append(val_loss)
-            history['val_mae'].append(val_mae_raw)
-            history['val_corr'].append(val_corr_raw)
-            history['val_mae_snap'].append(val_mae_snap)
-            history['val_corr_snap'].append(val_corr_snap)
+            history['val_acc'].append(cls_metrics['accuracy'])
+            history['val_f1_macro'].append(cls_metrics['f1_macro'])
 
             mlflow.log_metrics({
-                "train_loss":    train_loss,
-                "train_mae":     train_mae,
-                "val_loss":      val_loss,
-                "val_mae_raw":   val_mae_raw,
-                "val_mae_snap":  val_mae_snap,
-                "val_corr_raw":  val_corr_raw,
-                "val_corr_snap": val_corr_snap,
+                "train_loss":      train_loss,
+                "train_acc":       train_acc,
+                "val_loss":        val_loss,
+                "val_acc":         cls_metrics['accuracy'],
+                "val_f1_macro":    cls_metrics['f1_macro'],
+                "val_f1_negative": cls_metrics['f1'][0],
+                "val_f1_neutral":  cls_metrics['f1'][1],
+                "val_f1_positive": cls_metrics['f1'][2],
             }, step=epoch)
 
             print(
                 f'Epoch {epoch+1:02d}/{cfg["num_epochs"]}  |  '
-                f'Train Loss: {train_loss:.4f}  MAE: {train_mae:.4f}  |  '
-                f'Val Loss: {val_loss:.4f}  MAE(raw): {val_mae_raw:.4f}  '
-                f'MAE(snap): {val_mae_snap:.4f}  '
-                f'Corr(raw): {val_corr_raw:.4f}  Corr(snap): {val_corr_snap:.4f}'
+                f'Train Loss: {train_loss:.4f}  Acc: {train_acc:.4f}  |  '
+                f'Val Loss: {val_loss:.4f}  Acc: {cls_metrics["accuracy"]:.4f}  '
+                f'F1(macro): {cls_metrics["f1_macro"]:.4f}'
             )
+            print(
+                f'  F1 — neg: {cls_metrics["f1"][0]:.4f}  '
+                f'neu: {cls_metrics["f1"][1]:.4f}  '
+                f'pos: {cls_metrics["f1"][2]:.4f}'
+            )
+            print(f'  Confusion matrix [neg/neu/pos rows=true, cols=pred]:')
+            for i, row in enumerate(cls_metrics['confusion_matrix']):
+                print(f'    {CLASS_NAMES[i]:8s} {row}')
 
             # ── Save best model ───────────────────────────────────
-            if val_mae_raw < best_val_mae_raw:
-                best_val_mae_raw = val_mae_raw
-                no_improve       = 0
+            if cls_metrics['f1_macro'] > best_val_f1:
+                best_val_f1 = cls_metrics['f1_macro']
+                no_improve  = 0
                 torch.save(model.state_dict(), save_path)
-                print(f'  ✅ Best model saved (Val MAE raw={best_val_mae_raw:.4f} snap={val_mae_snap:.4f})')
+                print(f'  ✅ Best model saved (Val F1 macro={best_val_f1:.4f}  Acc={cls_metrics["accuracy"]:.4f})')
             else:
                 no_improve += 1
                 print(f'  No improvement for {no_improve}/{PATIENCE} epochs')
@@ -409,7 +467,7 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
                 'model_state':     model.state_dict(),
                 'optimizer_state': optimizer.state_dict(),
                 'scheduler_state': scheduler.state_dict(),
-                'best_val_mae_raw': best_val_mae_raw,
+                'best_val_f1':     best_val_f1,
                 'no_improve':      no_improve,
                 'history':         history,
             }, ckpt_path)
@@ -419,8 +477,8 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
 
         # ── Final MLflow logging ──────────────────────────────────
         mlflow.log_metrics({
-            "best_val_mae_raw":  best_val_mae_raw,
-            "best_val_corr_raw": max(history['val_corr']),
+            "best_val_f1_macro": best_val_f1,
+            "best_val_acc":      max(history['val_acc']),
         })
 
         mlflow.log_artifact(str(save_path))
@@ -437,8 +495,8 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
         )
 
         print(f'\n✅ MLflow run complete')
-        print(f'   Best Val MAE (raw): {best_val_mae_raw:.4f}')
-        print(f'   Best Val Corr (raw): {max(history["val_corr"]):.4f}')
+        print(f'   Best Val F1 (macro): {best_val_f1:.4f}')
+        print(f'   Best Val Acc: {max(history["val_acc"]):.4f}')
 
     print('\nTraining complete!')
     return history
