@@ -61,7 +61,7 @@ def sample_batch(cfg, device):   # ← remove tokenizer from args
         'attention_mask': attention_mask,
         'audio':          audio,
         'vision':         vision,
-        'label':          torch.randn(batch_size).to(device),
+        'label':          torch.tensor([-1., 0., 1., 0.]).to(device),  # valid MELD labels
     }
 
 
