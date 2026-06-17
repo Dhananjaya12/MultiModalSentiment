@@ -269,14 +269,16 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
 
 
         # t_optimizer_init_start = time.time()
+        head_lr = cfg.get('head_lr', cfg['learning_rate'] * 20)
         optimizer = optim.AdamW([
             {'params': [p for p in model.roberta.parameters() if p.requires_grad], 'lr': 2e-5},
             {'params': model.audio_encoder.parameters(),  'lr': cfg['learning_rate']},
             {'params': model.vision_encoder.parameters(), 'lr': cfg['learning_rate']},
             {'params': model.text_encoder.parameters(),   'lr': cfg['learning_rate']},
             {'params': model.fusion.parameters(),         'lr': cfg['learning_rate']},
-            {'params': model.regressor.parameters(),      'lr': cfg['learning_rate']},
+            {'params': model.regressor.parameters(),      'lr': head_lr},
         ], weight_decay=cfg['weight_decay'])
+        print(f'LR — encoders/fusion: {cfg["learning_rate"]}  |  head: {head_lr}')
         # t_optimizer_init_end = time.time()
         # print(f'Optimizer initialization time: {t_optimizer_init_end - t_optimizer_init_start:.2f} seconds\n')
 
