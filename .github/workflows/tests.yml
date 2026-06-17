@@ -54,7 +54,8 @@ jobs:
             "weight_decay":      1e-2,
             "train_ratio":       0.8,
             "val_ratio":         0.1,
-            "seed":              42
+            "seed":              42,
+            "mlflow_uri":        "tests/fixtures/mlruns"
         }
         EOF
 

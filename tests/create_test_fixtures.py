@@ -14,10 +14,11 @@ print("Creating fake HDF5...")
 N = 20
 
 with h5py.File("tests/fixtures/meld_dataset.h5", "w") as f:
-    f.create_dataset("audio",  data=np.random.randn(N, 300, 768).astype(np.float32))
-    f.create_dataset("vision", data=np.random.randn(N, 300, 512).astype(np.float32))
-    f.create_dataset("labels", data=np.random.choice([-1., 0., 1.], N).astype(np.float32))
-
+    f.create_dataset("audio",          data=np.random.randn(N, 300, 768).astype(np.float32))
+    f.create_dataset("vision",         data=np.random.randn(N, 300, 512).astype(np.float32))
+    f.create_dataset("labels",         data=np.random.choice([-1., 0., 1.], N).astype(np.float32))
+    f.create_dataset("input_ids",      data=np.random.randint(0, 50265, (N, 128)).astype(np.int64))
+    f.create_dataset("attention_mask", data=np.ones((N, 128), dtype=np.int64))
 
     dt    = h5py.string_dtype(encoding='utf-8')
     texts = np.array([f"test sentence {i}" for i in range(N)], dtype=object)
