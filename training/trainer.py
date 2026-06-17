@@ -73,9 +73,15 @@ def labels_to_class_idx(labels: torch.Tensor) -> torch.Tensor:
 
 def compute_class_weights(loader, num_classes: int = 3) -> torch.Tensor:
     """Inverse-frequency class weights computed from a dataloader's underlying labels."""
+    from torch.utils.data import Subset
     dataset = loader.dataset
+    if isinstance(dataset, Subset):
+        indices = sorted(dataset.indices)
+        dataset = dataset.dataset
+    else:
+        indices = sorted(dataset.indices)
     with h5py.File(dataset.hdf5_path, 'r') as f:
-        labels = f['labels'][sorted(dataset.indices)]
+        labels = f['labels'][indices]
     class_idx = np.clip(np.round(labels + 1.0), 0, num_classes - 1).astype(int)
     counts  = np.bincount(class_idx, minlength=num_classes).astype(np.float32)
     weights = counts.sum() / (num_classes * counts)
