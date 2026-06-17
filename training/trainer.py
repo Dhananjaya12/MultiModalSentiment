@@ -237,7 +237,7 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
     resume_from: explicit path to checkpoint.pt.
                  If None — auto-detects checkpoint.pt next to model_save_path.
     """
-    mlflow.set_tracking_uri('/content/drive/MyDrive/UNT OneDrive Backup/Backup folder/Backup folder/Projects/MultiModalSentimentGithub/output/mlruns')
+    mlflow.set_tracking_uri(cfg['mlflow_uri'])
     mlflow.set_experiment("mosei-multimodal-sentiment")
 
     with mlflow.start_run(run_name="transformer_fusion"):
@@ -483,7 +483,7 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
 
         mlflow.log_artifact(str(save_path))
 
-        config_save_path = "/content/drive/MyDrive/UNT OneDrive Backup/Backup folder/Backup folder/Projects/MultiModalSentimentGithub/output/config.json"
+        config_save_path = str(Path(cfg['model_save_path']).parent / 'config.json')
         with open(config_save_path, "w") as f:
             json.dump(cfg, f, indent=4)
         mlflow.log_artifact(config_save_path)

@@ -26,5 +26,6 @@
     "vision_drop_prob":  0.15,
     "text_drop_prob":    0.05,
     "dataset":           "meld",
-    "patience": 10
+    "patience": 10,
+    "mlflow_uri":        "C:\\Users\\dp1622\\Desktop\\data\\multi_modal_sentiment\\outputs\\mlruns"
 }
