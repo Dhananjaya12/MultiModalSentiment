@@ -23,11 +23,9 @@ from inference.feature_extractor import (
     SEQ_LEN, AUDIO_DIM, VISION_DIM,
 )
 from inference.utils import (
-    snap_to_valid,
     score_to_label,
     score_to_color,
     score_to_emoji,
-    estimate_confidence,
     check_modality_quality,
     format_result,
 )
@@ -89,7 +87,7 @@ class SentimentPredictor:
         # ── Tokenizer ─────────────────────────────────────────────
         print('Loading tokenizer...')
         from transformers import RobertaTokenizerFast
-        self.tokenizer = RobertaTokenizerFast.from_pretrained('roberta-large')
+        self.tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
         print('✅ Tokenizer ready')
 
         # ── Whisper — lazy loaded ─────────────────────────────────
@@ -139,16 +137,20 @@ class SentimentPredictor:
 
     # ── Core inference ────────────────────────────────────────────
 
+    # class index → MELD sentiment score
+    _CLASS_TO_SCORE = {0: -1.0, 1: 0.0, 2: 1.0}
+
     def _run_model(
         self,
         input_ids:      torch.Tensor,
         attention_mask: torch.Tensor,
         audio:          np.ndarray,
         vision:         np.ndarray,
-    ) -> float:
+    ) -> tuple:
         """
         Single forward pass.
-        Returns raw continuous score (float).
+        Returns (class_idx: int, probs: np.ndarray) where probs has shape (3,).
+        Classes: 0=negative, 1=neutral, 2=positive
         """
         audio_t  = torch.tensor(audio,  dtype=torch.float32).unsqueeze(0).to(self.device)
         vision_t = torch.tensor(vision, dtype=torch.float32).unsqueeze(0).to(self.device)
@@ -156,9 +158,11 @@ class SentimentPredictor:
         mask_t   = attention_mask.unsqueeze(0).to(self.device)
 
         with torch.no_grad():
-            output = self.model(ids_t, mask_t, audio_t, vision_t)
+            logits = self.model(ids_t, mask_t, audio_t, vision_t)  # (1, 3)
 
-        return float(output.squeeze().cpu().item())
+        probs     = torch.softmax(logits, dim=-1).squeeze(0).cpu().numpy()  # (3,)
+        class_idx = int(probs.argmax())
+        return class_idx, probs
 
     # ── Public API ────────────────────────────────────────────────
 
@@ -183,15 +187,15 @@ class SentimentPredictor:
         audio  = np.zeros((SEQ_LEN, AUDIO_DIM),  dtype=np.float32)
         vision = np.zeros((SEQ_LEN, VISION_DIM), dtype=np.float32)
 
-        raw_score    = self._run_model(input_ids, attention_mask, audio, vision)
-        snapped      = snap_to_valid(raw_score, self.dataset)
+        class_idx, probs = self._run_model(input_ids, attention_mask, audio, vision)
+        snapped      = self._CLASS_TO_SCORE[class_idx]
         label        = score_to_label(snapped)
-        confidence   = estimate_confidence(raw_score, self.dataset)
+        confidence   = float(probs[class_idx])
 
         modality_info = check_modality_quality(audio, vision, text)
 
         return format_result(
-            raw_score     = raw_score,
+            raw_score     = snapped,
             snapped_score = snapped,
             label         = label,
             confidence    = confidence,
@@ -254,15 +258,15 @@ class SentimentPredictor:
             )
 
             # ── Run model ─────────────────────────────────────────
-            raw_score  = self._run_model(
+            class_idx, probs = self._run_model(
                 input_ids, attention_mask, audio_norm, vision_norm
             )
-            snapped    = snap_to_valid(raw_score, self.dataset)
+            snapped    = self._CLASS_TO_SCORE[class_idx]
             label      = score_to_label(snapped)
-            confidence = estimate_confidence(raw_score, self.dataset)
+            confidence = float(probs[class_idx])
 
             return format_result(
-                raw_score     = raw_score,
+                raw_score     = snapped,
                 snapped_score = snapped,
                 label         = label,
                 confidence    = confidence,
@@ -358,20 +362,20 @@ class SentimentPredictor:
                         input_ids, attention_mask = extract_text_features(
                             text, self.tokenizer, self.max_text_len
                         )
-                        raw_score  = self._run_model(
+                        class_idx, probs = self._run_model(
                             input_ids, attention_mask,
                             feats['audio'], feats['vision']
                         )
-                        snapped    = snap_to_valid(raw_score, self.dataset)
+                        snapped    = self._CLASS_TO_SCORE[class_idx]
                         label      = score_to_label(snapped)
-                        confidence = estimate_confidence(raw_score, self.dataset)
+                        confidence = float(probs[class_idx])
 
                         results.append({
                             'start':      round(start, 2),
                             'end':        round(end, 2),
                             'text':       text,
                             'score':      snapped,
-                            'raw_score':  raw_score,
+                            'raw_score':  snapped,
                             'label':      label,
                             'confidence': round(confidence * 100, 1),
                             'color':      score_to_color(snapped),
