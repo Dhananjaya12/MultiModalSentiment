@@ -61,9 +61,9 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #                 (preds.std().clamp(min=1e-8) * targets.std().clamp(min=1e-8)))
 #     return mae + 0.5 * mse + 0.3 * corr
 
-def sentiment_loss(logits, class_idx, class_weights=None):
+def sentiment_loss(logits, class_idx, class_weights=None, label_smoothing=0.0):
     """Cross-entropy over the 3 sentiment classes (negative/neutral/positive)."""
-    return F.cross_entropy(logits, class_idx, weight=class_weights)
+    return F.cross_entropy(logits, class_idx, weight=class_weights, label_smoothing=label_smoothing)
 
 
 def labels_to_class_idx(labels: torch.Tensor) -> torch.Tensor:
@@ -139,7 +139,8 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True,
                   vision_drop_prob: float = 0.15,
                   text_drop_prob: float = 0.05,
                   scaler=None,
-                  class_weights=None):
+                  class_weights=None,
+                  label_smoothing: float = 0.0):
     """
     One full pass over the dataset.
     Returns: avg_loss, accuracy, all_preds (class idx), all_labels (class idx)
@@ -189,7 +190,7 @@ def run_one_epoch(model, loader, optimizer=None, is_train: bool = True,
                 # t_model_preds_end = time.time()
                 # print(f'  Model predictions time: {t_model_preds_end - t_model_preds_start:.2f} seconds')
                 # t_loss_start = time.time()
-                loss  = sentiment_loss(preds, class_idx, class_weights)
+                loss  = sentiment_loss(preds, class_idx, class_weights, label_smoothing)
                 # t_loss_end = time.time()
                 # print(f'  Loss computation time: {t_loss_end - t_loss_start:.2f} seconds')
 
@@ -357,6 +358,7 @@ def train(model, train_loader, val_loader, cfg, resume_from=None) -> dict:
                 text_drop_prob=text_drop_prob,
                 scaler=scaler,
                 class_weights=class_weights,
+                label_smoothing=cfg.get('label_smoothing', 0.0),
             )
             # t_epoch_training_end = time.time()
             # print(f'Epoch {epoch+1} training time: {t_epoch_training_end - t_epoch_training_start:.2f} seconds\n')

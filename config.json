@@ -13,7 +13,7 @@
     "n_heads": 8,
     "enc_layers": 2,
     "fuse_layers": 2,
-    "dropout": 0.2,
+    "dropout": 0.3,
     "batch_size": 16,
     "num_epochs": 50,
     "learning_rate": 0.00005,
@@ -27,5 +27,6 @@
     "text_drop_prob":    0.05,
     "dataset":           "meld",
     "patience": 10,
+    "label_smoothing": 0.1,
     "mlflow_uri":        "C:\\Users\\dp1622\\Desktop\\data\\multi_modal_sentiment\\outputs\\mlruns"
 }
