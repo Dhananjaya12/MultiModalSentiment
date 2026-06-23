@@ -1,9 +1,9 @@
-"""Unified Gradio interface for multimodal sentiment analysis."""
+"""Simple Gradio interface for multimodal sentiment analysis."""
 
+import html
 import os
 import sys
 import time
-import html
 from pathlib import Path
 
 import gradio as gr
@@ -17,54 +17,81 @@ CONFIG_PATH = os.environ.get('CONFIG_PATH', 'config.json')
 
 print('Loading SentimentPredictor...')
 predictor = SentimentPredictor(model_path=MODEL_PATH, config_path=CONFIG_PATH)
-print('✅ Predictor ready')
+print('Predictor ready')
 
 
 CSS = """
-:root {
-  --panel: rgba(17, 24, 39, 0.76);
-  --line: rgba(148, 163, 184, 0.18);
-  --muted: #94a3b8;
-}
 .gradio-container {
-  max-width: 1180px !important;
+  max-width: 1080px !important;
   margin: 0 auto !important;
-  background:
-    radial-gradient(circle at 15% 15%, rgba(59,130,246,.16), transparent 32%),
-    radial-gradient(circle at 85% 5%, rgba(168,85,247,.14), transparent 30%),
-    #070b14 !important;
+  background: #f7f8fc !important;
 }
-.hero {
-  padding: 34px 32px;
-  border: 1px solid var(--line);
-  border-radius: 24px;
-  background: linear-gradient(135deg, rgba(30,41,59,.94), rgba(15,23,42,.82));
-  box-shadow: 0 24px 70px rgba(0,0,0,.28);
-  margin-bottom: 18px;
+.header {
+  text-align: center;
+  padding: 26px 12px 20px;
 }
-.hero h1 { margin: 0; color: #f8fafc; font-size: 2.35rem; letter-spacing: -.04em; }
-.hero p { color: #cbd5e1; max-width: 760px; font-size: 1.02rem; margin: 12px 0 0; }
-.eyebrow { color: #60a5fa; font-weight: 700; text-transform: uppercase; letter-spacing: .14em; font-size: .72rem; }
-.panel { border: 1px solid var(--line) !important; border-radius: 20px !important; background: var(--panel) !important; padding: 8px !important; }
-.primary-btn { border-radius: 14px !important; min-height: 48px !important; font-weight: 700 !important; }
-.secondary-btn { border-radius: 14px !important; min-height: 48px !important; }
+.header h1 {
+  color: #172033;
+  font-size: 2rem;
+  margin: 0 0 8px;
+}
+.header p {
+  color: #667085;
+  margin: 0;
+}
+.card {
+  background: white !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 16px !important;
+  padding: 16px !important;
+  box-shadow: 0 8px 28px rgba(16, 24, 40, 0.06);
+}
+.primary-btn, .secondary-btn {
+  border-radius: 10px !important;
+  min-height: 44px !important;
+}
 .result-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
   padding: 24px;
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background: linear-gradient(145deg, rgba(15,23,42,.95), rgba(30,41,59,.82));
-  min-height: 190px;
+  box-shadow: 0 8px 28px rgba(16, 24, 40, 0.06);
 }
-.score-row { display: flex; align-items: center; gap: 16px; }
-.score-emoji { font-size: 3.5rem; }
-.score-label { font-size: 2rem; font-weight: 800; letter-spacing: -.03em; }
-.score-meta { color: var(--muted); margin-top: 4px; }
-.confidence-track { height: 10px; border-radius: 99px; background: rgba(148,163,184,.16); margin-top: 22px; overflow: hidden; }
-.confidence-fill { height: 100%; border-radius: 99px; }
-.info-card { padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(15,23,42,.72); color: #cbd5e1; }
-.info-card strong { color: #f8fafc; }
-.latency { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .84rem; color: #93c5fd; }
-.footer-note { text-align: center; color: #64748b; font-size: .82rem; padding: 18px; }
+.result-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.result-emoji { font-size: 3rem; }
+.result-label { font-size: 1.8rem; font-weight: 750; }
+.result-meta { color: #667085; margin-top: 4px; }
+.confidence-track {
+  height: 9px;
+  margin-top: 20px;
+  background: #eef0f4;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.confidence-fill { height: 100%; border-radius: 999px; }
+.transcript-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 14px;
+  color: #344054;
+  min-height: 100px;
+  box-shadow: 0 8px 28px rgba(16, 24, 40, 0.06);
+}
+.transcript-card h3 { color: #172033; margin: 0 0 10px; }
+.placeholder { color: #98a2b3; }
+.error-card {
+  color: #b42318;
+  background: #fff4f2;
+  border: 1px solid #fecdca;
+  border-radius: 12px;
+  padding: 16px;
+}
 """
 
 
@@ -73,11 +100,11 @@ def result_html(result: dict) -> str:
     confidence = result['confidence']
     return f"""
     <div class="result-card">
-      <div class="score-row">
-        <div class="score-emoji">{result['emoji']}</div>
+      <div class="result-row">
+        <div class="result-emoji">{result['emoji']}</div>
         <div>
-          <div class="score-label" style="color:{color}">{result['label']}</div>
-          <div class="score-meta">Confidence {confidence:.1f}% · score {result['score']:+.0f}</div>
+          <div class="result-label" style="color:{color}">{result['label']}</div>
+          <div class="result-meta">Confidence: {confidence:.1f}%</div>
         </div>
       </div>
       <div class="confidence-track">
@@ -87,38 +114,24 @@ def result_html(result: dict) -> str:
     """
 
 
-def modality_html(result: dict) -> str:
-    def state(active, name):
-        return f"{'●' if active else '○'} {name}"
-
-    warnings = result.get('warnings', [])
-    warning_html = ''.join(f'<div>⚠ {html.escape(str(warning))}</div>' for warning in warnings)
-    return f"""
-    <div class="info-card">
-      <strong>Signals used</strong><br><br>
-      {state(result.get('has_text', False), 'Text / speech')} &nbsp;&nbsp;
-      {state(result.get('has_audio', False), 'Audio')} &nbsp;&nbsp;
-      {state(result.get('has_vision', False), 'Vision')}
-      <div style="color:#fbbf24;margin-top:10px">{warning_html}</div>
-    </div>
-    """
-
-
 def transcript_html(text: str) -> str:
     safe_text = html.escape((text or '').strip())
     if not safe_text:
-        safe_text = 'No speech transcript was detected.'
-    return f'<div class="info-card"><strong>Transcript</strong><p style="margin-bottom:0">{safe_text}</p></div>'
+        safe_text = '<span class="placeholder">No speech transcript was detected.</span>'
+    return f'<div class="transcript-card"><h3>Transcript</h3><div>{safe_text}</div></div>'
 
 
-def latency_html(result: dict, total_seconds: float) -> str:
-    timings = result.get('timings', {})
-    parts = []
-    for key in ('audio_features', 'vision_features', 'normalization', 'feature_extraction_total'):
-        if key in timings:
-            parts.append(f'{key.replace("_", " ")}: {timings[key]:.3f}s')
-    parts.append(f'end to end: {total_seconds:.3f}s')
-    return '<div class="info-card latency"><strong>Performance</strong><br>' + '<br>'.join(parts) + '</div>'
+def toggle_text_input(media_path):
+    if media_path:
+        return gr.update(
+            value='',
+            interactive=False,
+            placeholder='Text input is disabled while a video is selected.',
+        )
+    return gr.update(
+        interactive=True,
+        placeholder='Type text here when no video is selected.',
+    )
 
 
 def analyze(media_path, text, progress=gr.Progress()):
@@ -126,101 +139,108 @@ def analyze(media_path, text, progress=gr.Progress()):
     text = (text or '').strip()
 
     if media_path:
-        progress(0.08, desc='Reading video and audio')
+        progress(0.1, desc='Analyzing video')
         result = predictor.predict_from_video(str(media_path), mode='upload')
-        source = 'Recorded or uploaded media'
     elif text:
         progress(0.2, desc='Analyzing text')
         result = predictor.predict_from_text(text)
-        source = 'Text only'
     else:
-        message = '<div class="info-card" style="color:#f87171">Add text or record/upload a video first.</div>'
-        return message, '', '', '', 'Waiting for input'
+        error = '<div class="error-card">Record or upload a video, or enter some text.</div>'
+        return '', error
 
     if 'error' in result:
-        message = html.escape(str(result.get('message', 'Inference failed')))
-        error = f'<div class="info-card" style="color:#f87171"><strong>Unable to analyze</strong><br>{message}</div>'
-        return error, '', '', '', 'Analysis failed'
+        message = html.escape(str(result.get('message', 'Inference failed.')))
+        return '', f'<div class="error-card">{message}</div>'
 
-    total_seconds = time.perf_counter() - started
-    print(f'[TIMING][gradio] unified_analysis_total={total_seconds:.3f}s', flush=True)
-    progress(1.0, desc='Complete')
-
-    return (
-        result_html(result),
-        transcript_html(result.get('transcript', text)),
-        modality_html(result),
-        latency_html(result, total_seconds),
-        f'{source} · completed in {total_seconds:.2f}s',
+    print(
+        f'[TIMING][gradio] unified_analysis_total={time.perf_counter() - started:.3f}s',
+        flush=True,
     )
+    progress(1.0, desc='Complete')
+    return transcript_html(result.get('transcript', text)), result_html(result)
 
 
 def clear_all():
-    return None, '', '', '', '', '', 'Ready'
+    return (
+        None,
+        gr.update(value='', interactive=True, placeholder='Type text here when no video is selected.'),
+        '<div class="transcript-card"><h3>Transcript</h3><div class="placeholder">Transcript will appear here.</div></div>',
+        '<div class="result-card"><div class="placeholder">Prediction will appear here.</div></div>',
+    )
 
 
-HEADER = """
-<div class="hero">
-  <div class="eyebrow">Multimodal AI · MELD</div>
-  <h1>Read the feeling behind the moment.</h1>
-  <p>Record a short clip, upload an existing video, or enter text. The model combines language, vocal cues, and visual context into one sentiment prediction.</p>
-</div>
-"""
-
-with gr.Blocks(theme=gr.themes.Soft(primary_hue='blue', neutral_hue='slate'), css=CSS, title='Multimodal Sentiment') as demo:
-    gr.HTML(HEADER)
+with gr.Blocks(
+    theme=gr.themes.Soft(primary_hue='indigo', neutral_hue='slate'),
+    css=CSS,
+    title='Multimodal Sentiment Analysis',
+) as demo:
+    gr.HTML("""
+    <div class="header">
+      <h1>Multimodal Sentiment Analysis</h1>
+      <p>Upload or record a video, or analyze text.</p>
+    </div>
+    """)
 
     with gr.Row(equal_height=False):
-        with gr.Column(scale=6, elem_classes='panel'):
-            gr.Markdown('### Add your input')
+        with gr.Column(scale=6, elem_classes='card'):
             media_input = gr.Video(
-                label='Upload or record a video',
+                label='Video',
                 sources=['upload', 'webcam'],
                 format=None,
                 include_audio=True,
                 webcam_options=gr.WebcamOptions(
                     mirror=False,
                     constraints={
-                        'video': {'width': 640, 'height': 480, 'frameRate': {'ideal': 24, 'max': 30}},
+                        'video': {
+                            'width': {'ideal': 640},
+                            'height': {'ideal': 480},
+                            'frameRate': {'ideal': 24, 'max': 30},
+                        },
                         'audio': True,
                     },
                 ),
-                height=360,
+                height=340,
             )
             text_input = gr.Textbox(
-                label='Or analyze text only',
-                placeholder='Type a sentence when no video is provided…',
+                label='Text',
+                placeholder='Type text here when no video is selected.',
                 lines=3,
             )
             with gr.Row():
-                analyze_button = gr.Button('Analyze sentiment', variant='primary', elem_classes='primary-btn')
-                clear_button = gr.Button('Clear', variant='secondary', elem_classes='secondary-btn')
-            status = gr.Textbox(value='Ready', label='Status', interactive=False)
+                analyze_button = gr.Button(
+                    'Analyze', variant='primary', elem_classes='primary-btn'
+                )
+                clear_button = gr.Button(
+                    'Clear', variant='secondary', elem_classes='secondary-btn'
+                )
 
         with gr.Column(scale=5):
-            gr.Markdown('### Result')
-            result_output = gr.HTML('<div class="result-card"><div class="score-meta">Your prediction will appear here.</div></div>')
-            modality_output = gr.HTML()
+            transcript_output = gr.HTML(
+                '<div class="transcript-card"><h3>Transcript</h3>'
+                '<div class="placeholder">Transcript will appear here.</div></div>'
+            )
+            result_output = gr.HTML(
+                '<div class="result-card"><div class="placeholder">'
+                'Prediction will appear here.</div></div>'
+            )
 
-    with gr.Row():
-        with gr.Column(scale=7):
-            transcript_output = gr.HTML()
-        with gr.Column(scale=4):
-            latency_output = gr.HTML()
-
-    gr.HTML('<div class="footer-note">RoBERTa-base · Wav2Vec2 · CLIP ViT-B/32 · Cross-modal Transformer</div>')
-
+    media_input.change(
+        fn=toggle_text_input,
+        inputs=[media_input],
+        outputs=[text_input],
+        queue=False,
+    )
     analyze_button.click(
         fn=analyze,
         inputs=[media_input, text_input],
-        outputs=[result_output, transcript_output, modality_output, latency_output, status],
+        outputs=[transcript_output, result_output],
         concurrency_limit=1,
         show_progress='full',
     )
     clear_button.click(
         fn=clear_all,
         inputs=[],
-        outputs=[media_input, text_input, result_output, transcript_output, modality_output, latency_output, status],
+        outputs=[media_input, text_input, transcript_output, result_output],
         queue=False,
     )
 

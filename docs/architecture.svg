@@ -1,0 +1,75 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="760" viewBox="0 0 1440 760">
+<defs>
+  <marker id="a" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0 0L0 6L9 3z" fill="#334155"/></marker>
+  <filter id="s"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-opacity=".14"/></filter>
+  <style>
+    .t{font:700 30px Arial;fill:#0f172a}.sub{font:16px Arial;fill:#475569}.stage{font:700 14px Arial;fill:#475569;letter-spacing:1px}
+    .h{font:700 18px Arial;fill:#0f172a}.p{font:14px Arial;fill:#334155}.sm{font:13px Arial;fill:#475569}.d{font:700 13px Arial;fill:#0369a1}
+    .ar{stroke:#334155;stroke-width:2.2;fill:none;marker-end:url(#a)}
+  </style>
+</defs>
+<rect width="1440" height="760" fill="#f8fafc"/>
+<text x="720" y="45" text-anchor="middle" class="t">Multimodal Sentiment Classification Architecture</text>
+<text x="720" y="72" text-anchor="middle" class="sub">Pretrained text, speech, and visual features are aligned, fused, and classified together</text>
+
+<text x="135" y="112" text-anchor="middle" class="stage">1 · PRETRAINED FEATURES</text>
+<text x="430" y="112" text-anchor="middle" class="stage">2 · MODALITY ENCODERS</text>
+<text x="790" y="112" text-anchor="middle" class="stage">3 · CROSS-MODAL FUSION</text>
+<text x="1210" y="112" text-anchor="middle" class="stage">4 · PREDICTION HEAD</text>
+
+<!-- Inputs -->
+<g filter="url(#s)">
+ <rect x="25" y="145" width="225" height="125" rx="14" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+ <text x="137" y="176" text-anchor="middle" class="h">Text · RoBERTa-base</text><text x="137" y="204" text-anchor="middle" class="p">contextual word features</text><text x="137" y="235" text-anchor="middle" class="d">768 dimensions</text>
+ <rect x="25" y="315" width="225" height="125" rx="14" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+ <text x="137" y="346" text-anchor="middle" class="h">Audio · Wav2Vec2</text><text x="137" y="374" text-anchor="middle" class="p">speech and vocal features</text><text x="137" y="405" text-anchor="middle" class="d">768 dimensions</text>
+ <rect x="25" y="485" width="225" height="125" rx="14" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+ <text x="137" y="516" text-anchor="middle" class="h">Video · CLIP ViT-B/32</text><text x="137" y="544" text-anchor="middle" class="p">visual frame features</text><text x="137" y="575" text-anchor="middle" class="d">512 dimensions</text>
+</g>
+
+<path d="M250 207H300" class="ar"/><path d="M250 377H300" class="ar"/><path d="M250 547H300" class="ar"/>
+
+<!-- Encoders -->
+<g filter="url(#s)">
+ <rect x="300" y="145" width="255" height="125" rx="14" fill="white" stroke="#2563eb" stroke-width="2"/>
+ <text x="427" y="175" text-anchor="middle" class="h">Text Encoder</text><text x="427" y="202" text-anchor="middle" class="p">projection: 768 → 128</text><text x="427" y="225" text-anchor="middle" class="p">positional encoding</text><text x="427" y="248" text-anchor="middle" class="p">1-layer Transformer</text>
+ <rect x="300" y="315" width="255" height="125" rx="14" fill="white" stroke="#16a34a" stroke-width="2"/>
+ <text x="427" y="345" text-anchor="middle" class="h">Audio Encoder</text><text x="427" y="372" text-anchor="middle" class="p">projection: 768 → 128</text><text x="427" y="395" text-anchor="middle" class="p">positional encoding</text><text x="427" y="418" text-anchor="middle" class="p">1-layer Transformer</text>
+ <rect x="300" y="485" width="255" height="125" rx="14" fill="white" stroke="#d97706" stroke-width="2"/>
+ <text x="427" y="515" text-anchor="middle" class="h">Video Encoder</text><text x="427" y="542" text-anchor="middle" class="p">projection: 512 → 128</text><text x="427" y="565" text-anchor="middle" class="p">positional encoding</text><text x="427" y="588" text-anchor="middle" class="p">1-layer Transformer</text>
+</g>
+
+<path d="M555 207C600 207 600 275 630 292" class="ar"/><path d="M555 377H620" class="ar"/><path d="M555 547C600 547 600 480 630 463" class="ar"/>
+
+<!-- Fusion -->
+<g filter="url(#s)">
+ <rect x="620" y="145" width="350" height="465" rx="18" fill="#ede9fe" stroke="#7c3aed" stroke-width="2.5"/>
+ <text x="795" y="180" text-anchor="middle" class="h">Pairwise Cross-Attention</text>
+ <text x="795" y="205" text-anchor="middle" class="p">Each modality receives context from the other two</text>
+ <rect x="675" y="240" width="240" height="62" rx="10" fill="white" stroke="#8b5cf6"/><text x="795" y="265" text-anchor="middle" class="h">Text ↔ Audio</text><text x="795" y="287" text-anchor="middle" class="sm">words compared with vocal tone</text>
+ <rect x="675" y="325" width="240" height="62" rx="10" fill="white" stroke="#8b5cf6"/><text x="795" y="350" text-anchor="middle" class="h">Text ↔ Video</text><text x="795" y="372" text-anchor="middle" class="sm">words compared with visual context</text>
+ <rect x="675" y="410" width="240" height="62" rx="10" fill="white" stroke="#8b5cf6"/><text x="795" y="435" text-anchor="middle" class="h">Audio ↔ Video</text><text x="795" y="457" text-anchor="middle" class="sm">vocal tone compared with expressions</text>
+ <text x="795" y="515" text-anchor="middle" class="p">↔ means attention works in both directions</text>
+ <text x="795" y="540" text-anchor="middle" class="p">3 modality pairs = 6 directional attention streams</text>
+ <text x="795" y="575" text-anchor="middle" class="d">Output: 3 fused sequences · 128D each</text>
+</g>
+
+<path d="M970 377H1025" class="ar"/>
+
+<!-- Head -->
+<g filter="url(#s)">
+ <rect x="1025" y="145" width="390" height="465" rx="18" fill="white" stroke="#0f766e" stroke-width="2.5"/>
+ <text x="1220" y="180" text-anchor="middle" class="h">Three-Class Prediction Head</text>
+ <rect x="1080" y="230" width="280" height="68" rx="10" fill="#ecfeff" stroke="#0891b2"/><text x="1220" y="257" text-anchor="middle" class="h">Temporal Mean Pooling</text><text x="1220" y="281" text-anchor="middle" class="sm">one vector per fused modality</text>
+ <path d="M1220 298V330" class="ar"/>
+ <rect x="1080" y="330" width="280" height="68" rx="10" fill="#ecfeff" stroke="#0891b2"/><text x="1220" y="357" text-anchor="middle" class="h">Concatenate</text><text x="1220" y="381" text-anchor="middle" class="d">128 × 3 = 384 dimensions</text>
+ <path d="M1220 398V430" class="ar"/>
+ <rect x="1080" y="430" width="280" height="68" rx="10" fill="#ecfeff" stroke="#0891b2"/><text x="1220" y="457" text-anchor="middle" class="h">MLP Classifier</text><text x="1220" y="481" text-anchor="middle" class="d">384 → 128 → 64 → 3 logits</text>
+ <text x="1220" y="545" text-anchor="middle" class="h">Negative · Neutral · Positive</text>
+ <text x="1220" y="575" text-anchor="middle" class="sm">highest logit becomes the prediction</text>
+</g>
+
+<rect x="230" y="660" width="980" height="62" rx="12" fill="#e2e8f0"/>
+<text x="720" y="685" text-anchor="middle" class="h">Why fuse the modalities?</text>
+<text x="720" y="708" text-anchor="middle" class="p">The model can use agreement—or disagreement—between spoken words, vocal tone, and visible behavior.</text>
+</svg>

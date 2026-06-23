@@ -1,0 +1,9 @@
+-r requirements.txt
+
+gradio>=5.0
+openai-whisper
+open-clip-torch
+opencv-python-headless
+librosa
+pillow
+pyngrok

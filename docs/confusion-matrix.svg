@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="610" viewBox="0 0 900 610" role="img" aria-labelledby="title desc">
+<title id="title">MELD held-out test confusion matrix</title><desc id="desc">Confusion matrix with true labels as rows and predicted labels as columns.</desc>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f8fafc"/><stop offset="1" stop-color="#eef2ff"/></linearGradient><style>.title{font:700 28px Inter,Segoe UI,sans-serif;fill:#0f172a}.sub{font:400 14px Inter,Segoe UI,sans-serif;fill:#64748b}.label{font:700 15px Inter,Segoe UI,sans-serif;fill:#334155}.num{font:700 26px Inter,Segoe UI,sans-serif}.pct{font:400 13px Inter,Segoe UI,sans-serif}.axis{font:700 13px Inter,Segoe UI,sans-serif;fill:#6366f1;letter-spacing:1px}</style></defs>
+<rect width="900" height="610" rx="24" fill="url(#bg)"/><text x="55" y="55" class="title">Held-out test confusion matrix</text><text x="55" y="80" class="sub">2,610 MELD utterances · 64.87% accuracy · 0.6222 macro-F1</text>
+<text x="475" y="125" text-anchor="middle" class="axis">PREDICTED LABEL</text><text x="38" y="365" transform="rotate(-90 38 365)" text-anchor="middle" class="axis">TRUE LABEL</text>
+<text x="315" y="165" text-anchor="middle" class="label">Negative</text><text x="505" y="165" text-anchor="middle" class="label">Neutral</text><text x="695" y="165" text-anchor="middle" class="label">Positive</text>
+<text x="175" y="250" text-anchor="end" class="label">Negative</text><text x="175" y="390" text-anchor="end" class="label">Neutral</text><text x="175" y="530" text-anchor="end" class="label">Positive</text>
+<g>
+<rect x="205" y="190" width="180" height="120" rx="14" fill="#2563eb"/><text x="295" y="245" text-anchor="middle" class="num" fill="#fff">570</text><text x="295" y="273" text-anchor="middle" class="pct" fill="#dbeafe">68.4% recall</text>
+<rect x="395" y="190" width="180" height="120" rx="14" fill="#dbeafe"/><text x="485" y="255" text-anchor="middle" class="num" fill="#1e3a8a">179</text>
+<rect x="585" y="190" width="180" height="120" rx="14" fill="#eff6ff"/><text x="675" y="255" text-anchor="middle" class="num" fill="#1e3a8a">84</text>
+<rect x="205" y="330" width="180" height="120" rx="14" fill="#bfdbfe"/><text x="295" y="395" text-anchor="middle" class="num" fill="#1e3a8a">295</text>
+<rect x="395" y="330" width="180" height="120" rx="14" fill="#2563eb"/><text x="485" y="385" text-anchor="middle" class="num" fill="#fff">872</text><text x="485" y="413" text-anchor="middle" class="pct" fill="#dbeafe">69.4% recall</text>
+<rect x="585" y="330" width="180" height="120" rx="14" fill="#eff6ff"/><text x="675" y="395" text-anchor="middle" class="num" fill="#1e3a8a">89</text>
+<rect x="205" y="470" width="180" height="120" rx="14" fill="#dbeafe"/><text x="295" y="535" text-anchor="middle" class="num" fill="#1e3a8a">149</text>
+<rect x="395" y="470" width="180" height="120" rx="14" fill="#dbeafe"/><text x="485" y="535" text-anchor="middle" class="num" fill="#1e3a8a">121</text>
+<rect x="585" y="470" width="180" height="120" rx="14" fill="#2563eb"/><text x="675" y="525" text-anchor="middle" class="num" fill="#fff">251</text><text x="675" y="553" text-anchor="middle" class="pct" fill="#dbeafe">48.2% recall</text>
+</g></svg>
