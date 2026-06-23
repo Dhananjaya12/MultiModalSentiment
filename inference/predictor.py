@@ -21,6 +21,7 @@ from inference.feature_extractor import (
     extract_from_video,
     extract_text_features,
     apply_normalization,
+    preload_feature_models,
     SEQ_LEN, AUDIO_DIM, VISION_DIM,
 )
 from inference.utils import (
@@ -68,6 +69,9 @@ class SentimentPredictor:
 
         self.dataset    = self.cfg.get('dataset', 'meld')
         self.max_text_len = self.cfg.get('max_text_len', 128)
+        self.max_vision_frames = self.cfg.get('max_vision_frames', 32)
+        self.clip_batch_size = self.cfg.get('clip_batch_size', 16)
+        self.preload_models = self.cfg.get('preload_inference_models', True)
 
         # ── Load model ────────────────────────────────────────────
         print('Loading model...')
@@ -100,6 +104,12 @@ class SentimentPredictor:
         # ── Whisper — lazy loaded ─────────────────────────────────
         self._whisper_tiny = None   # for webcam
         self._whisper_base = None   # for video upload
+
+        if self.preload_models:
+            preload_feature_models(load_audio=True, load_vision=True)
+            self._get_whisper('upload')
+            self._warm_up_model()
+
         print(f'[TIMING][startup] predictor_total={time.perf_counter() - startup_started:.3f}s', flush=True)
 
     def _sync_cuda(self):
@@ -110,6 +120,17 @@ class SentimentPredictor:
     def _log_timings(scope: str, timings: dict):
         values = ' | '.join(f'{name}={seconds:.3f}s' for name, seconds in timings.items())
         print(f'[TIMING][{scope}] {values}', flush=True)
+
+    def _warm_up_model(self):
+        started = time.perf_counter()
+        ids = torch.zeros((1, self.max_text_len), dtype=torch.long, device=self.device)
+        mask = torch.ones_like(ids)
+        audio = torch.zeros((1, SEQ_LEN, AUDIO_DIM), device=self.device)
+        vision = torch.zeros((1, SEQ_LEN, VISION_DIM), device=self.device)
+        with torch.inference_mode():
+            self.model(ids, mask, audio, vision)
+        self._sync_cuda()
+        print(f'[TIMING][startup] fusion_warmup={time.perf_counter() - started:.3f}s', flush=True)
 
     # ── Whisper lazy loading ──────────────────────────────────────
 
@@ -154,7 +175,7 @@ class SentimentPredictor:
             transcribe_started = time.perf_counter()
             result = wmodel.transcribe(
                 audio_path,
-                word_timestamps = (mode == 'upload'),  # segments for timeline
+                word_timestamps = False,
                 language        = 'en',
             )
             self._sync_cuda()
@@ -167,6 +188,7 @@ class SentimentPredictor:
             })
             return text, segments
         except Exception as e:
+            print(f'Whisper transcription failed: {e}', flush=True)
             return '', []
 
     # ── Core inference ────────────────────────────────────────────
@@ -197,7 +219,7 @@ class SentimentPredictor:
 
         self._sync_cuda()
         forward_started = time.perf_counter()
-        with torch.no_grad():
+        with torch.inference_mode():
             logits = self.model(ids_t, mask_t, audio_t, vision_t)  # (1, 3)
         self._sync_cuda()
         forward_seconds = time.perf_counter() - forward_started
@@ -271,8 +293,13 @@ class SentimentPredictor:
             return {'error': 'file_not_found', 'message': f'File not found: {video_path}'}
 
         try:
+            total_started = time.perf_counter()
             # ── Extract audio + vision ────────────────────────────
-            feats      = extract_from_video(video_path)
+            feats = extract_from_video(
+                video_path,
+                max_vision_frames=self.max_vision_frames,
+                clip_batch_size=self.clip_batch_size,
+            )
             audio_norm = feats['audio']
             vision_norm= feats['vision']
             audio_raw  = feats['audio_raw']
@@ -312,7 +339,7 @@ class SentimentPredictor:
             label      = score_to_label(snapped)
             confidence = float(probs[class_idx])
 
-            return format_result(
+            result = format_result(
                 raw_score     = snapped,
                 snapped_score = snapped,
                 label         = label,
@@ -321,6 +348,11 @@ class SentimentPredictor:
                 transcript    = text,
                 dataset       = self.dataset,
             )
+            result['timings'] = {
+                **feats.get('timings', {}),
+                'request_total': time.perf_counter() - total_started,
+            }
+            return result
 
         except Exception as e:
             return {'error': 'inference_failed', 'message': str(e)}

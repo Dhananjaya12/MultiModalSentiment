@@ -1,434 +1,231 @@
-"""
-app/app.py
-
-Gradio UI for Multimodal Sentiment Analysis.
-Three tabs: Text, Video Upload, Live Webcam.
-
-Deploy on Hugging Face Spaces:
-  - Set MODEL_PATH env var to your model file path
-  - Set CONFIG_PATH env var to your config.json path
-"""
+"""Unified Gradio interface for multimodal sentiment analysis."""
 
 import os
 import sys
-import json
-import tempfile
 import time
 from pathlib import Path
 
 import gradio as gr
-import numpy as np
 
-# Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from inference.predictor import SentimentPredictor
 
-# ── Config ────────────────────────────────────────────────────────
-MODEL_PATH  = os.environ.get('MODEL_PATH',  r'D:\data\multimodal\results\best_model.pt')
+MODEL_PATH = os.environ.get('MODEL_PATH', r'D:\data\multimodal\results\best_model.pt')
 CONFIG_PATH = os.environ.get('CONFIG_PATH', 'config.json')
 
-# ── Load predictor once at startup ───────────────────────────────
 print('Loading SentimentPredictor...')
-predictor = SentimentPredictor(
-    model_path  = MODEL_PATH,
-    config_path = CONFIG_PATH,
-)
+predictor = SentimentPredictor(model_path=MODEL_PATH, config_path=CONFIG_PATH)
 print('✅ Predictor ready')
 
 
-# ── Helper: build sentiment gauge HTML ───────────────────────────
+CSS = """
+:root {
+  --panel: rgba(17, 24, 39, 0.76);
+  --line: rgba(148, 163, 184, 0.18);
+  --muted: #94a3b8;
+}
+.gradio-container {
+  max-width: 1180px !important;
+  margin: 0 auto !important;
+  background:
+    radial-gradient(circle at 15% 15%, rgba(59,130,246,.16), transparent 32%),
+    radial-gradient(circle at 85% 5%, rgba(168,85,247,.14), transparent 30%),
+    #070b14 !important;
+}
+.hero {
+  padding: 34px 32px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(30,41,59,.94), rgba(15,23,42,.82));
+  box-shadow: 0 24px 70px rgba(0,0,0,.28);
+  margin-bottom: 18px;
+}
+.hero h1 { margin: 0; color: #f8fafc; font-size: 2.35rem; letter-spacing: -.04em; }
+.hero p { color: #cbd5e1; max-width: 760px; font-size: 1.02rem; margin: 12px 0 0; }
+.eyebrow { color: #60a5fa; font-weight: 700; text-transform: uppercase; letter-spacing: .14em; font-size: .72rem; }
+.panel { border: 1px solid var(--line) !important; border-radius: 20px !important; background: var(--panel) !important; padding: 8px !important; }
+.primary-btn { border-radius: 14px !important; min-height: 48px !important; font-weight: 700 !important; }
+.secondary-btn { border-radius: 14px !important; min-height: 48px !important; }
+.result-card {
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(15,23,42,.95), rgba(30,41,59,.82));
+  min-height: 190px;
+}
+.score-row { display: flex; align-items: center; gap: 16px; }
+.score-emoji { font-size: 3.5rem; }
+.score-label { font-size: 2rem; font-weight: 800; letter-spacing: -.03em; }
+.score-meta { color: var(--muted); margin-top: 4px; }
+.confidence-track { height: 10px; border-radius: 99px; background: rgba(148,163,184,.16); margin-top: 22px; overflow: hidden; }
+.confidence-fill { height: 100%; border-radius: 99px; }
+.info-card { padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(15,23,42,.72); color: #cbd5e1; }
+.info-card strong { color: #f8fafc; }
+.latency { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .84rem; color: #93c5fd; }
+.footer-note { text-align: center; color: #64748b; font-size: .82rem; padding: 18px; }
+"""
 
-def build_gauge_html(score: float, label: str, confidence: float, color: str, emoji: str) -> str:
-    """Build a visual sentiment gauge as HTML."""
-    pct = int((score + 1) / 2 * 100)  # map -1..1 → 0..100%
+
+def result_html(result: dict) -> str:
+    color = result['color']
+    confidence = result['confidence']
     return f"""
-    <div style="font-family: 'Segoe UI', sans-serif; padding: 16px; 
-                background: #1a1a2e; border-radius: 12px; color: white;">
-      <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-        <span style="font-size:2.5rem;">{emoji}</span>
+    <div class="result-card">
+      <div class="score-row">
+        <div class="score-emoji">{result['emoji']}</div>
         <div>
-          <div style="font-size:1.8rem; font-weight:700; color:{color};">{label}</div>
-          <div style="font-size:0.9rem; color:#aaa;">Confidence: {confidence:.1f}%</div>
+          <div class="score-label" style="color:{color}">{result['label']}</div>
+          <div class="score-meta">Confidence {confidence:.1f}% · score {result['score']:+.0f}</div>
         </div>
       </div>
-      <div style="background:#333; border-radius:8px; height:20px; overflow:hidden;">
-        <div style="width:{pct}%; background:{color}; height:100%; 
-                    border-radius:8px; transition:width 0.5s ease;">
-        </div>
-      </div>
-      <div style="display:flex; justify-content:space-between; 
-                  font-size:0.75rem; color:#888; margin-top:4px;">
-        <span>Negative</span><span>Neutral</span><span>Positive</span>
-      </div>
-      <div style="text-align:center; font-size:0.85rem; color:#aaa; margin-top:8px;">
-        Score: {score:+.3f}
+      <div class="confidence-track">
+        <div class="confidence-fill" style="width:{confidence}%;background:{color}"></div>
       </div>
     </div>
     """
 
 
-def build_modality_html(has_audio: bool, has_vision: bool, has_text: bool, warnings: list) -> str:
-    """Build modality availability indicator."""
-    def icon(active): return '✅' if active else '❌'
-    warning_html = ''
-    if warnings:
-        items = ''.join(f'<li>{w}</li>' for w in warnings)
-        warning_html = f'<ul style="color:#FFBB33;margin:8px 0;padding-left:20px;">{items}</ul>'
+def modality_html(result: dict) -> str:
+    def state(active, name):
+        return f"{'●' if active else '○'} {name}"
 
+    warnings = result.get('warnings', [])
+    warning_html = ''.join(f'<div>⚠ {html.escape(str(warning))}</div>' for warning in warnings)
     return f"""
-    <div style="font-family: monospace; padding:12px; background:#0d0d1a; 
-                border-radius:8px; color:white; margin-top:8px;">
-      <b>Modality Detection</b>
-      <div style="margin-top:8px;">
-        {icon(has_text)}  Text/Speech &nbsp;&nbsp;
-        {icon(has_audio)} Audio &nbsp;&nbsp;
-        {icon(has_vision)} Vision (Face)
-      </div>
-      {warning_html}
+    <div class="info-card">
+      <strong>Signals used</strong><br><br>
+      {state(result.get('has_text', False), 'Text / speech')} &nbsp;&nbsp;
+      {state(result.get('has_audio', False), 'Audio')} &nbsp;&nbsp;
+      {state(result.get('has_vision', False), 'Vision')}
+      <div style="color:#fbbf24;margin-top:10px">{warning_html}</div>
     </div>
     """
 
 
-def build_transcript_html(utterances: list) -> str:
-    """Build color-coded transcript from utterance list."""
-    if not utterances:
-        return '<p style="color:#888;">No transcript available.</p>'
-
-    lines = []
-    for u in utterances:
-        color = u.get('color', '#FFBB33')
-        text  = u.get('text', '')
-        label = u.get('label', '')
-        start = u.get('start', 0)
-        emoji = u.get('emoji', '')
-        lines.append(
-            f'<div style="padding:6px 10px; margin:4px 0; border-left:4px solid {color}; '
-            f'background:rgba(255,255,255,0.05); border-radius:4px;">'
-            f'<span style="color:#888; font-size:0.8rem;">[{start:.1f}s]</span> '
-            f'<span style="color:white;">{text}</span> '
-            f'<span style="color:{color}; font-size:0.8rem;">{emoji} {label}</span>'
-            f'</div>'
-        )
-    return '<div style="font-family: sans-serif;">' + ''.join(lines) + '</div>'
+def transcript_html(text: str) -> str:
+    safe_text = html.escape((text or '').strip())
+    if not safe_text:
+        safe_text = 'No speech transcript was detected.'
+    return f'<div class="info-card"><strong>Transcript</strong><p style="margin-bottom:0">{safe_text}</p></div>'
 
 
-# ── Tab 1: Text Analysis ──────────────────────────────────────────
-
-def analyze_text(text: str):
-    request_started = time.perf_counter()
-    if not text or not text.strip():
-        return (
-            '<p style="color:#FF4444;">Please enter some text.</p>',
-            None, None
-        )
-
-    result = predictor.predict_from_text(text)
-    print(f'[TIMING][gradio] analyze_text_total={time.perf_counter() - request_started:.3f}s', flush=True)
-
-    if 'error' in result:
-        return (
-            f'<p style="color:#FF4444;">Error: {result["message"]}</p>',
-            None, None
-        )
-
-    gauge = build_gauge_html(
-        score      = result['score'],
-        label      = result['label'],
-        confidence = result['confidence'],
-        color      = result['color'],
-        emoji      = result['emoji'],
-    )
-    modality = build_modality_html(
-        has_audio  = result['has_audio'],
-        has_vision = result['has_vision'],
-        has_text   = result['has_text'],
-        warnings   = result['warnings'],
-    )
-    note = '📝 Analysis based on text only. Upload a video for full multimodal analysis.'
-
-    return gauge, modality, note
+def latency_html(result: dict, total_seconds: float) -> str:
+    timings = result.get('timings', {})
+    parts = []
+    for key in ('audio_features', 'vision_features', 'normalization', 'feature_extraction_total'):
+        if key in timings:
+            parts.append(f'{key.replace("_", " ")}: {timings[key]:.3f}s')
+    parts.append(f'end to end: {total_seconds:.3f}s')
+    return '<div class="info-card latency"><strong>Performance</strong><br>' + '<br>'.join(parts) + '</div>'
 
 
-# ── Tab 2: Video Upload ───────────────────────────────────────────
+def analyze(media_path, text, progress=gr.Progress()):
+    started = time.perf_counter()
+    text = (text or '').strip()
 
-def analyze_video(file):
-    request_started = time.perf_counter()
-    if file is None:
-        return (
-            '<p style="color:#FF4444;">Please upload a video file.</p>',
-            None, None, None, None
-        )
-
-    video_path = file.name if hasattr(file, 'name') else str(file)
-
-    # Overall prediction
-    result = predictor.predict_from_video(video_path, mode='upload')
-    overall_seconds = time.perf_counter() - request_started
-
-    if 'error' in result:
-        msg = result.get('message', 'Unknown error')
-        return (
-            f'<p style="color:#FF4444;">Error: {msg}</p>',
-            None, None, None, None
-        )
-
-    gauge = build_gauge_html(
-        score      = result['score'],
-        label      = result['label'],
-        confidence = result['confidence'],
-        color      = result['color'],
-        emoji      = result['emoji'],
-    )
-
-    # Utterance timeline
-    timeline_started = time.perf_counter()
-    utterances = predictor.predict_utterances(video_path, mode='upload')
-    timeline_seconds = time.perf_counter() - timeline_started
-    print(
-        f'[TIMING][gradio] video_overall={overall_seconds:.3f}s | '
-        f'video_timeline={timeline_seconds:.3f}s | '
-        f'analyze_video_total={time.perf_counter() - request_started:.3f}s',
-        flush=True,
-    )
-
-    # Build timeline dataframe data
-    if utterances:
-        import pandas as pd
-        df = pd.DataFrame([{
-            'Time (s)':   f"{u['start']:.1f} – {u['end']:.1f}",
-            'Text':       u['text'],
-            'Sentiment':  f"{u['emoji']} {u['label']}",
-            'Score':      f"{u['score']:+.2f}",
-            'Confidence': f"{u['confidence']:.1f}%",
-        } for u in utterances])
+    if media_path:
+        progress(0.08, desc='Reading video and audio')
+        result = predictor.predict_from_video(str(media_path), mode='upload')
+        source = 'Recorded or uploaded media'
+    elif text:
+        progress(0.2, desc='Analyzing text')
+        result = predictor.predict_from_text(text)
+        source = 'Text only'
     else:
-        import pandas as pd
-        df = pd.DataFrame(columns=['Time (s)', 'Text', 'Sentiment', 'Score', 'Confidence'])
-
-    transcript_html = build_transcript_html(utterances)
-    modality_html   = build_modality_html(
-        has_audio  = result['has_audio'],
-        has_vision = result['has_vision'],
-        has_text   = result['has_text'],
-        warnings   = result['warnings'],
-    )
-
-    return gauge, df, transcript_html, modality_html, None
-
-
-# ── Tab 3: Live Webcam ────────────────────────────────────────────
-
-webcam_history = []
-
-def analyze_webcam_clip(video):
-    """
-    Called when user records a clip from webcam.
-    Uses whisper-tiny for fast inference.
-    """
-    global webcam_history
-    request_started = time.perf_counter()
-
-    if video is None:
-        return (
-            '<p style="color:#888;">Record a clip to analyze.</p>',
-            None
-        )
-
-    result = predictor.predict_from_video(video, mode='webcam')
-    print(f'[TIMING][gradio] analyze_webcam_total={time.perf_counter() - request_started:.3f}s', flush=True)
+        message = '<div class="info-card" style="color:#f87171">Add text or record/upload a video first.</div>'
+        return message, '', '', '', 'Waiting for input'
 
     if 'error' in result:
-        return (
-            f'<p style="color:#FF4444;">Error: {result.get("message", "")}</p>',
-            None
-        )
+        message = html.escape(str(result.get('message', 'Inference failed')))
+        error = f'<div class="info-card" style="color:#f87171"><strong>Unable to analyze</strong><br>{message}</div>'
+        return error, '', '', '', 'Analysis failed'
 
-    # Add to rolling history (last 10)
-    webcam_history.append({
-        'text':   result.get('transcript', '(no speech)'),
-        'label':  result['label'],
-        'score':  result['score'],
-        'color':  result['color'],
-        'emoji':  result['emoji'],
-        'confidence': result['confidence'],
-    })
-    webcam_history = webcam_history[-10:]
+    total_seconds = time.perf_counter() - started
+    print(f'[TIMING][gradio] unified_analysis_total={total_seconds:.3f}s', flush=True)
+    progress(1.0, desc='Complete')
 
-    gauge = build_gauge_html(
-        score      = result['score'],
-        label      = result['label'],
-        confidence = result['confidence'],
-        color      = result['color'],
-        emoji      = result['emoji'],
+    return (
+        result_html(result),
+        transcript_html(result.get('transcript', text)),
+        modality_html(result),
+        latency_html(result, total_seconds),
+        f'{source} · completed in {total_seconds:.2f}s',
     )
 
-    # Rolling history table
-    import pandas as pd
-    df = pd.DataFrame([{
-        'Utterance':  h['text'][:60] + ('...' if len(h['text']) > 60 else ''),
-        'Sentiment':  f"{h['emoji']} {h['label']}",
-        'Score':      f"{h['score']:+.2f}",
-        'Confidence': f"{h['confidence']:.1f}%",
-    } for h in reversed(webcam_history)])
 
-    return gauge, df
+def clear_all():
+    return None, '', '', '', '', '', 'Ready'
 
-
-def clear_webcam_history():
-    global webcam_history
-    webcam_history = []
-    return None, None
-
-
-# ── Build Gradio App ──────────────────────────────────────────────
 
 HEADER = """
-<div style="text-align:center; padding:20px; 
-            background:linear-gradient(135deg,#1a1a2e,#16213e);
-            border-radius:12px; margin-bottom:16px;">
-  <h1 style="color:white; font-size:2rem; margin:0;">
-    🎭 Multimodal Sentiment Analyzer
-  </h1>
-  <p style="color:#aaa; margin:8px 0 0;">
-    Analyzes sentiment from <b>text</b>, <b>audio</b>, and <b>facial expressions</b> 
-    using a cross-modal transformer trained on MELD dataset.
-  </p>
+<div class="hero">
+  <div class="eyebrow">Multimodal AI · MELD</div>
+  <h1>Read the feeling behind the moment.</h1>
+  <p>Record a short clip, upload an existing video, or enter text. The model combines language, vocal cues, and visual context into one sentiment prediction.</p>
 </div>
 """
 
-TEXT_EXAMPLES = [
-    ["I absolutely love this product, it works perfectly!"],
-    ["This is the worst experience I've ever had."],
-    ["The meeting was okay, nothing special happened."],
-    ["I can't believe how amazing this turned out!"],
-    ["I'm not sure how I feel about this decision."],
-]
-
-with gr.Blocks(
-    theme=gr.themes.Soft(primary_hue='blue'),
-    title='Multimodal Sentiment Analyzer',
-) as demo:
-
+with gr.Blocks(theme=gr.themes.Soft(primary_hue='blue', neutral_hue='slate'), css=CSS, title='Multimodal Sentiment') as demo:
     gr.HTML(HEADER)
 
-    with gr.Tabs():
-
-        # ── Tab 1: Text ───────────────────────────────────────────
-        with gr.TabItem('📝 Text Analysis'):
-            gr.Markdown(
-                '### Analyze sentiment from text\n'
-                'Type or paste any text. Results are instant.'
+    with gr.Row(equal_height=False):
+        with gr.Column(scale=6, elem_classes='panel'):
+            gr.Markdown('### Add your input')
+            media_input = gr.Video(
+                label='Upload or record a video',
+                sources=['upload', 'webcam'],
+                format=None,
+                include_audio=True,
+                webcam_options=gr.WebcamOptions(
+                    mirror=False,
+                    constraints={
+                        'video': {'width': 640, 'height': 480, 'frameRate': {'ideal': 24, 'max': 30}},
+                        'audio': True,
+                    },
+                ),
+                height=360,
+            )
+            text_input = gr.Textbox(
+                label='Or analyze text only',
+                placeholder='Type a sentence when no video is provided…',
+                lines=3,
             )
             with gr.Row():
-                with gr.Column(scale=2):
-                    text_input = gr.Textbox(
-                        lines       = 4,
-                        placeholder = 'Type or paste text here...',
-                        label       = 'Input Text',
-                    )
-                    text_btn = gr.Button('🔍 Analyze', variant='primary')
-                    gr.Examples(
-                        examples   = TEXT_EXAMPLES,
-                        inputs     = [text_input],
-                        label      = 'Example Sentences',
-                    )
-                with gr.Column(scale=2):
-                    text_gauge    = gr.HTML(label='Sentiment')
-                    text_modality = gr.HTML(label='Modalities')
-                    text_note     = gr.Textbox(label='Note', interactive=False)
+                analyze_button = gr.Button('Analyze sentiment', variant='primary', elem_classes='primary-btn')
+                clear_button = gr.Button('Clear', variant='secondary', elem_classes='secondary-btn')
+            status = gr.Textbox(value='Ready', label='Status', interactive=False)
 
-            text_btn.click(
-                fn      = analyze_text,
-                inputs  = [text_input],
-                outputs = [text_gauge, text_modality, text_note],
-            )
+        with gr.Column(scale=5):
+            gr.Markdown('### Result')
+            result_output = gr.HTML('<div class="result-card"><div class="score-meta">Your prediction will appear here.</div></div>')
+            modality_output = gr.HTML()
 
-        # ── Tab 2: Video Upload ───────────────────────────────────
-        with gr.TabItem('🎬 Video Upload'):
-            gr.Markdown(
-                '### Analyze sentiment from a video or audio file\n'
-                'Upload an `.mp4`, `.mov`, `.avi`, `.wav`, or `.mp3` file. '
-                'Analysis includes per-utterance timeline.'
-            )
-            with gr.Row():
-                with gr.Column(scale=1):
-                    video_input = gr.File(
-                        label      = 'Upload Video / Audio',
-                        file_types = ['.mp4', '.mov', '.avi', '.wav', '.mp3'],
-                    )
-                    video_btn = gr.Button('🔍 Analyze', variant='primary')
-                with gr.Column(scale=2):
-                    video_gauge    = gr.HTML(label='Overall Sentiment')
-                    video_modality = gr.HTML(label='Modalities Detected')
+    with gr.Row():
+        with gr.Column(scale=7):
+            transcript_output = gr.HTML()
+        with gr.Column(scale=4):
+            latency_output = gr.HTML()
 
-            gr.Markdown('### Utterance Timeline')
-            video_df = gr.Dataframe(
-                headers    = ['Time (s)', 'Text', 'Sentiment', 'Score', 'Confidence'],
-                label      = 'Per-Utterance Results',
-                interactive= False,
-            )
-            gr.Markdown('### Color-Coded Transcript')
-            video_transcript = gr.HTML(label='Transcript')
-            video_warn       = gr.HTML()   # hidden warnings
+    gr.HTML('<div class="footer-note">RoBERTa-base · Wav2Vec2 · CLIP ViT-B/32 · Cross-modal Transformer</div>')
 
-            video_btn.click(
-                fn      = analyze_video,
-                inputs  = [video_input],
-                outputs = [video_gauge, video_df, video_transcript, video_modality, video_warn],
-            )
-
-        # ── Tab 3: Webcam ─────────────────────────────────────────
-        with gr.TabItem('📹 Live Webcam'):
-            gr.Markdown(
-                '### Analyze sentiment from live webcam\n'
-                'Record a short clip (3-10 seconds). '
-                'Uses faster Whisper-tiny model for speed.\n\n'
-                '> **Tip:** Speak clearly for 3-5 seconds, then stop recording.'
-            )
-            with gr.Row():
-                with gr.Column(scale=1):
-                    webcam_input = gr.Video(
-                        sources = ['webcam'],
-                        label   = 'Record Clip',
-                    )
-                    with gr.Row():
-                        webcam_btn   = gr.Button('🔍 Analyze Clip', variant='primary')
-                        webcam_clear = gr.Button('🗑️ Clear History', variant='secondary')
-                with gr.Column(scale=2):
-                    webcam_gauge = gr.HTML(label='Current Sentiment')
-
-            gr.Markdown('### Last 10 Utterances')
-            webcam_df = gr.Dataframe(
-                headers    = ['Utterance', 'Sentiment', 'Score', 'Confidence'],
-                label      = 'Rolling History',
-                interactive= False,
-            )
-
-            webcam_btn.click(
-                fn      = analyze_webcam_clip,
-                inputs  = [webcam_input],
-                outputs = [webcam_gauge, webcam_df],
-            )
-            webcam_clear.click(
-                fn      = clear_webcam_history,
-                inputs  = [],
-                outputs = [webcam_gauge, webcam_df],
-            )
-
-    # ── Footer ────────────────────────────────────────────────────
-    gr.HTML("""
-    <div style="text-align:center; padding:16px; color:#888; font-size:0.85rem;">
-      Trained on <b>MELD dataset</b> (Friends TV series) · 
-      RoBERTa-large + MediaPipe + librosa · 
-      3-class sentiment: Negative / Neutral / Positive
-    </div>
-    """)
-
+    analyze_button.click(
+        fn=analyze,
+        inputs=[media_input, text_input],
+        outputs=[result_output, transcript_output, modality_output, latency_output, status],
+        concurrency_limit=1,
+        show_progress='full',
+    )
+    clear_button.click(
+        fn=clear_all,
+        inputs=[],
+        outputs=[media_input, text_input, result_output, transcript_output, modality_output, latency_output, status],
+        queue=False,
+    )
 
 if __name__ == '__main__':
-    demo.launch(
-        server_name = '0.0.0.0',
-        server_port = 7860,
-        share       = False,
+    demo.queue(default_concurrency_limit=1).launch(
+        server_name='0.0.0.0',
+        server_port=7860,
+        share=False,
     )

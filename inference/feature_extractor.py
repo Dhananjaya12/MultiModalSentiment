@@ -28,7 +28,9 @@ SEQ_LEN    = 300
 AUDIO_DIM  = 768   # wav2vec2-base hidden size
 VISION_DIM = 512   # CLIP ViT-B/32
 SR         = 16000
-FRAME_STEP = 3     # same as data prep — every 3rd frame
+FRAME_STEP       = 3     # training-time sampling interval
+MAX_VISION_FRAMES = 32    # production cap; output is still padded to SEQ_LEN
+CLIP_BATCH_SIZE   = 16
 
 WAV2VEC_MODEL = 'facebook/wav2vec2-base-960h'
 CLIP_MODEL    = 'ViT-B-32'
@@ -77,6 +79,17 @@ def _get_clip():
     return _clip_model, _clip_preprocess
 
 
+def preload_feature_models(load_audio: bool = True, load_vision: bool = True):
+    """Load feature encoders during server startup instead of the first request."""
+    started = time.perf_counter()
+    if load_audio:
+        _get_wav2vec()
+    if load_vision:
+        _get_clip()
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    print(f'[TIMING][startup] feature_models_load={time.perf_counter() - started:.3f}s', flush=True)
+
 # ── Audio feature extraction ──────────────────────────────────────
 
 def extract_audio_features(video_path, seq_len=SEQ_LEN, audio_dim=AUDIO_DIM):
@@ -100,7 +113,7 @@ def extract_audio_features(video_path, seq_len=SEQ_LEN, audio_dim=AUDIO_DIM):
         device = _get_device()
         inputs = processor(y, sampling_rate=SR, return_tensors='pt', padding=True)
 
-        with torch.no_grad():
+        with torch.inference_mode():
             out = model(inputs.input_values.to(device))
 
         features = out.last_hidden_state.squeeze(0).cpu().numpy()
@@ -120,60 +133,84 @@ def extract_audio_features(video_path, seq_len=SEQ_LEN, audio_dim=AUDIO_DIM):
             os.remove(audio_path)
 
 
-def extract_vision_features(video_path, seq_len=SEQ_LEN, vision_dim=VISION_DIM):
+def extract_vision_features(
+    video_path,
+    seq_len=SEQ_LEN,
+    vision_dim=VISION_DIM,
+    max_frames=MAX_VISION_FRAMES,
+    batch_size=CLIP_BATCH_SIZE,
+):
+    """Extract uniformly sampled CLIP features using batched GPU inference."""
     from PIL import Image
+
     try:
         clip_m, clip_prep = _get_clip()
         device = _get_device()
-        cap, frames, fc = cv2.VideoCapture(str(video_path)), [], 0
+        cap = cv2.VideoCapture(str(video_path))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
+        if total_frames > 0:
+            sample_count = min(max_frames, total_frames)
+            target_indices = set(
+                np.linspace(0, total_frames - 1, sample_count, dtype=np.int64).tolist()
+            )
+        else:
+            target_indices = None
+
+        images = []
+        frame_index = 0
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
 
-            if fc % FRAME_STEP == 0:
-                try:
-                    rgb   = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    pil   = Image.fromarray(rgb)
-                    img_t = clip_prep(pil).unsqueeze(0).to(device)
-
-                    with torch.no_grad():
-                        feat = clip_m.encode_image(img_t)
-                        feat = feat.squeeze(0).cpu().numpy().astype(np.float32)
-
-                    # Force exactly vision_dim — matches notebook exactly
-                    feat = feat.flatten()
-                    if len(feat) >= vision_dim:
-                        feat = feat[:vision_dim]
-                    else:
-                        feat = np.pad(feat, (0, vision_dim - len(feat)))
-
-                    frames.append(feat)
-
-                except Exception:
-                    # Bad frame — zeros, keep consistent shape
-                    frames.append(np.zeros(vision_dim, dtype=np.float32))
-
-            fc += 1
+            should_sample = (
+                frame_index in target_indices
+                if target_indices is not None
+                else frame_index % FRAME_STEP == 0 and len(images) < max_frames
+            )
+            if should_sample:
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                images.append(clip_prep(Image.fromarray(rgb)))
+                if len(images) >= max_frames:
+                    break
+            frame_index += 1
 
         cap.release()
-
-        if len(frames) == 0:
+        if not images:
             return np.zeros((seq_len, vision_dim), dtype=np.float32)
 
-        features = np.stack(frames)
-        T = features.shape[0]
-        if T < seq_len:
-            features = np.vstack([features, np.zeros((seq_len-T, vision_dim), dtype=np.float32)])
+        feature_batches = []
+        with torch.inference_mode():
+            for start in range(0, len(images), batch_size):
+                image_batch = torch.stack(images[start:start + batch_size]).to(device)
+                encoded = clip_m.encode_image(image_batch)
+                feature_batches.append(encoded.float().cpu().numpy())
+
+        features = np.concatenate(feature_batches, axis=0).astype(np.float32)
+        if features.shape[1] > vision_dim:
+            features = features[:, :vision_dim]
+        elif features.shape[1] < vision_dim:
+            features = np.pad(features, ((0, 0), (0, vision_dim - features.shape[1])))
+
+        if len(features) < seq_len:
+            features = np.vstack([
+                features,
+                np.zeros((seq_len - len(features), vision_dim), dtype=np.float32),
+            ])
         else:
             features = features[:seq_len]
 
+        print(
+            f'[TIMING][features] vision_frames_used={len(images)} | '
+            f'clip_batches={(len(images) + batch_size - 1) // batch_size}',
+            flush=True,
+        )
         return features.astype(np.float32)
 
     except Exception as e:
+        print(f'Vision feature extraction failed: {e}', flush=True)
         return np.zeros((seq_len, vision_dim), dtype=np.float32)
-
 
 # ── Text feature extraction ───────────────────────────────────────
 
@@ -247,6 +284,8 @@ def extract_from_video(
     seq_len:    int = SEQ_LEN,
     audio_dim:  int = AUDIO_DIM,
     vision_dim: int = VISION_DIM,
+    max_vision_frames: int = MAX_VISION_FRAMES,
+    clip_batch_size: int = CLIP_BATCH_SIZE,
 ) -> dict:
     """
     Full feature extraction pipeline for one video file.
@@ -266,7 +305,9 @@ def extract_from_video(
     audio_seconds = time.perf_counter() - started
 
     started = time.perf_counter()
-    vision_raw = extract_vision_features(video_path, seq_len, vision_dim)
+    vision_raw = extract_vision_features(
+        video_path, seq_len, vision_dim, max_vision_frames, clip_batch_size
+    )
     vision_seconds = time.perf_counter() - started
 
     started = time.perf_counter()
