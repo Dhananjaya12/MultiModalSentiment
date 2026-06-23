@@ -3,6 +3,7 @@
 import os
 import sys
 import time
+import html
 from pathlib import Path
 
 import gradio as gr
