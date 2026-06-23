@@ -13,6 +13,7 @@ import os
 import json
 import torch
 import numpy as np
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -50,6 +51,7 @@ class SentimentPredictor:
         config_path: str,
         device:      Optional[str] = None,
     ):
+        startup_started = time.perf_counter()
         self.model_path  = Path(model_path)
         self.config_path = Path(config_path)
 
@@ -69,6 +71,7 @@ class SentimentPredictor:
 
         # ── Load model ────────────────────────────────────────────
         print('Loading model...')
+        model_started = time.perf_counter()
         from model.model import TransformerFusionModel
         self.model = TransformerFusionModel(self.cfg)
         state = torch.load(
@@ -82,17 +85,31 @@ class SentimentPredictor:
         self.model.load_state_dict(state)
         self.model.to(self.device)
         self.model.eval()
+        self._sync_cuda()
         print(f'✅ Model loaded from {model_path}')
+        print(f'[TIMING][startup] fusion_model_load={time.perf_counter() - model_started:.3f}s', flush=True)
 
         # ── Tokenizer ─────────────────────────────────────────────
         print('Loading tokenizer...')
+        tokenizer_started = time.perf_counter()
         from transformers import RobertaTokenizerFast
         self.tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
         print('✅ Tokenizer ready')
+        print(f'[TIMING][startup] tokenizer_load={time.perf_counter() - tokenizer_started:.3f}s', flush=True)
 
         # ── Whisper — lazy loaded ─────────────────────────────────
         self._whisper_tiny = None   # for webcam
         self._whisper_base = None   # for video upload
+        print(f'[TIMING][startup] predictor_total={time.perf_counter() - startup_started:.3f}s', flush=True)
+
+    def _sync_cuda(self):
+        if self.device.type == 'cuda':
+            torch.cuda.synchronize(self.device)
+
+    @staticmethod
+    def _log_timings(scope: str, timings: dict):
+        values = ' | '.join(f'{name}={seconds:.3f}s' for name, seconds in timings.items())
+        print(f'[TIMING][{scope}] {values}', flush=True)
 
     # ── Whisper lazy loading ──────────────────────────────────────
 
@@ -105,13 +122,19 @@ class SentimentPredictor:
         import whisper
         if mode == 'webcam':
             if self._whisper_tiny is None:
+                started = time.perf_counter()
                 print('Loading whisper-tiny for webcam...')
                 self._whisper_tiny = whisper.load_model('tiny')
+                self._sync_cuda()
+                print(f'[TIMING][startup] whisper_tiny_load={time.perf_counter() - started:.3f}s', flush=True)
             return self._whisper_tiny
         else:
             if self._whisper_base is None:
+                started = time.perf_counter()
                 print('Loading whisper-base for video upload...')
                 self._whisper_base = whisper.load_model('base')
+                self._sync_cuda()
+                print(f'[TIMING][startup] whisper_base_load={time.perf_counter() - started:.3f}s', flush=True)
             return self._whisper_base
 
     def _transcribe(self, audio_path: str, mode: str = 'upload') -> tuple:
@@ -123,14 +146,25 @@ class SentimentPredictor:
             segments: list of {start, end, text} dicts
         """
         try:
-            wmodel  = self._get_whisper(mode)
-            result  = wmodel.transcribe(
+            total_started = time.perf_counter()
+            model_started = time.perf_counter()
+            wmodel = self._get_whisper(mode)
+            model_seconds = time.perf_counter() - model_started
+            self._sync_cuda()
+            transcribe_started = time.perf_counter()
+            result = wmodel.transcribe(
                 audio_path,
                 word_timestamps = (mode == 'upload'),  # segments for timeline
                 language        = 'en',
             )
-            text     = result.get('text', '').strip()
+            self._sync_cuda()
+            text = result.get('text', '').strip()
             segments = result.get('segments', [])
+            self._log_timings('whisper', {
+                'model_get': model_seconds,
+                'transcribe': time.perf_counter() - transcribe_started,
+                'total': time.perf_counter() - total_started,
+            })
             return text, segments
         except Exception as e:
             return '', []
@@ -152,16 +186,29 @@ class SentimentPredictor:
         Returns (class_idx: int, probs: np.ndarray) where probs has shape (3,).
         Classes: 0=negative, 1=neutral, 2=positive
         """
+        total_started = time.perf_counter()
+        transfer_started = time.perf_counter()
         audio_t  = torch.tensor(audio,  dtype=torch.float32).unsqueeze(0).to(self.device)
         vision_t = torch.tensor(vision, dtype=torch.float32).unsqueeze(0).to(self.device)
         ids_t    = input_ids.unsqueeze(0).to(self.device)
         mask_t   = attention_mask.unsqueeze(0).to(self.device)
+        self._sync_cuda()
+        transfer_seconds = time.perf_counter() - transfer_started
 
+        self._sync_cuda()
+        forward_started = time.perf_counter()
         with torch.no_grad():
             logits = self.model(ids_t, mask_t, audio_t, vision_t)  # (1, 3)
+        self._sync_cuda()
+        forward_seconds = time.perf_counter() - forward_started
 
         probs     = torch.softmax(logits, dim=-1).squeeze(0).cpu().numpy()  # (3,)
         class_idx = int(probs.argmax())
+        self._log_timings('model', {
+            'tensor_transfer': transfer_seconds,
+            'fusion_forward': forward_seconds,
+            'total': time.perf_counter() - total_started,
+        })
         return class_idx, probs
 
     # ── Public API ────────────────────────────────────────────────

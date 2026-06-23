@@ -13,6 +13,7 @@ import os
 import sys
 import json
 import tempfile
+import time
 from pathlib import Path
 
 import gradio as gr
@@ -115,6 +116,7 @@ def build_transcript_html(utterances: list) -> str:
 # ── Tab 1: Text Analysis ──────────────────────────────────────────
 
 def analyze_text(text: str):
+    request_started = time.perf_counter()
     if not text or not text.strip():
         return (
             '<p style="color:#FF4444;">Please enter some text.</p>',
@@ -122,6 +124,7 @@ def analyze_text(text: str):
         )
 
     result = predictor.predict_from_text(text)
+    print(f'[TIMING][gradio] analyze_text_total={time.perf_counter() - request_started:.3f}s', flush=True)
 
     if 'error' in result:
         return (
@@ -150,6 +153,7 @@ def analyze_text(text: str):
 # ── Tab 2: Video Upload ───────────────────────────────────────────
 
 def analyze_video(file):
+    request_started = time.perf_counter()
     if file is None:
         return (
             '<p style="color:#FF4444;">Please upload a video file.</p>',
@@ -160,6 +164,7 @@ def analyze_video(file):
 
     # Overall prediction
     result = predictor.predict_from_video(video_path, mode='upload')
+    overall_seconds = time.perf_counter() - request_started
 
     if 'error' in result:
         msg = result.get('message', 'Unknown error')
@@ -177,7 +182,15 @@ def analyze_video(file):
     )
 
     # Utterance timeline
+    timeline_started = time.perf_counter()
     utterances = predictor.predict_utterances(video_path, mode='upload')
+    timeline_seconds = time.perf_counter() - timeline_started
+    print(
+        f'[TIMING][gradio] video_overall={overall_seconds:.3f}s | '
+        f'video_timeline={timeline_seconds:.3f}s | '
+        f'analyze_video_total={time.perf_counter() - request_started:.3f}s',
+        flush=True,
+    )
 
     # Build timeline dataframe data
     if utterances:
@@ -214,6 +227,7 @@ def analyze_webcam_clip(video):
     Uses whisper-tiny for fast inference.
     """
     global webcam_history
+    request_started = time.perf_counter()
 
     if video is None:
         return (
@@ -222,6 +236,7 @@ def analyze_webcam_clip(video):
         )
 
     result = predictor.predict_from_video(video, mode='webcam')
+    print(f'[TIMING][gradio] analyze_webcam_total={time.perf_counter() - request_started:.3f}s', flush=True)
 
     if 'error' in result:
         return (

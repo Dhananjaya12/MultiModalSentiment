@@ -17,6 +17,7 @@ import os
 import cv2
 import numpy as np
 import torch
+import time
 import warnings
 from pathlib import Path
 
@@ -192,11 +193,13 @@ def extract_text_features(
         Empty string → zero input_ids, ones attention_mask
         (ones mask prevents transformer from crashing)
     """
+    started = time.perf_counter()
     text = text.strip() if text else ''
 
     if len(text) == 0:
         input_ids      = torch.zeros(max_len, dtype=torch.long)
         attention_mask = torch.ones(max_len,  dtype=torch.long)
+        print(f'[TIMING][features] text_tokenization={time.perf_counter() - started:.3f}s', flush=True)
         return input_ids, attention_mask
 
     enc = tokenizer(
@@ -206,10 +209,12 @@ def extract_text_features(
         truncation     = True,
         return_tensors = 'pt',
     )
-    return (
+    result = (
         enc['input_ids'].squeeze(0),
         enc['attention_mask'].squeeze(0),
     )
+    print(f'[TIMING][features] text_tokenization={time.perf_counter() - started:.3f}s', flush=True)
+    return result
 
 
 # ── Normalization — must match dataloader.py exactly ─────────────
@@ -254,12 +259,34 @@ def extract_from_video(
           'vision_raw': np.ndarray — before normalization
         }
     """
-    audio_raw  = extract_audio_features(video_path, seq_len, audio_dim)
-    vision_raw = extract_vision_features(video_path, seq_len, vision_dim)
+    total_started = time.perf_counter()
 
+    started = time.perf_counter()
+    audio_raw = extract_audio_features(video_path, seq_len, audio_dim)
+    audio_seconds = time.perf_counter() - started
+
+    started = time.perf_counter()
+    vision_raw = extract_vision_features(video_path, seq_len, vision_dim)
+    vision_seconds = time.perf_counter() - started
+
+    started = time.perf_counter()
     audio_norm, vision_norm = apply_normalization(
         audio_raw.copy(),
         vision_raw.copy(),
+    )
+    normalization_seconds = time.perf_counter() - started
+
+    timings = {
+        'audio_features': audio_seconds,
+        'vision_features': vision_seconds,
+        'normalization': normalization_seconds,
+        'feature_extraction_total': time.perf_counter() - total_started,
+    }
+    print(
+        '[TIMING][features] ' + ' | '.join(
+            f'{name}={seconds:.3f}s' for name, seconds in timings.items()
+        ),
+        flush=True,
     )
 
     return {
@@ -267,4 +294,5 @@ def extract_from_video(
         'vision':     vision_norm,
         'audio_raw':  audio_raw,
         'vision_raw': vision_raw,
+        'timings':    timings,
     }
