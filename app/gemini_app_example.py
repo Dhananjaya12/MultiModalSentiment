@@ -37,6 +37,7 @@ from google.genai import types
 
 
 MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+_CLIENT: Optional[genai.Client] = None
 
 
 SYSTEM_PROMPT = """
@@ -61,13 +62,16 @@ If the input is unclear, choose neutral with low confidence.
 
 
 def get_client() -> genai.Client:
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "GEMINI_API_KEY is not set. Get one from "
-            "https://aistudio.google.com/app/apikey"
-        )
-    return genai.Client(api_key=api_key)
+    global _CLIENT
+    if _CLIENT is None:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "GEMINI_API_KEY is not set. Get one from "
+                "https://aistudio.google.com/app/apikey"
+            )
+        _CLIENT = genai.Client(api_key=api_key)
+    return _CLIENT
 
 
 def mime_type(path: str) -> str:
@@ -97,7 +101,8 @@ def analyze_with_gemini(text: str = "", video_path: Optional[str] = None) -> str
         parts.append("\nUploaded or recorded video:")
         parts.append(file_part(video_path))
 
-    response = get_client().models.generate_content(
+    client = get_client()
+    response = client.models.generate_content(
         model=MODEL_NAME,
         contents=parts,
         config=types.GenerateContentConfig(
