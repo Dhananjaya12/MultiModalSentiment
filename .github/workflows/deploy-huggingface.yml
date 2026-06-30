@@ -1,0 +1,59 @@
+﻿name: Deploy to Hugging Face Space
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-space:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Prepare Space folder
+        run: |
+          mkdir -p hf_space
+          rsync -av \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='hf_space' \
+            --exclude='outputs' \
+            --exclude='mlruns' \
+            --exclude='wandb' \
+            --exclude='*.pt' \
+            --exclude='*.pth' \
+            --exclude='*.ckpt' \
+            --exclude='*.h5' \
+            --exclude='*.hdf5' \
+            --exclude='*.mp4' \
+            --exclude='*.webm' \
+            --exclude='*.avi' \
+            --exclude='*.mov' \
+            --exclude='*.wav' \
+            --exclude='*.mp3' \
+            ./ hf_space/
+          cp huggingface/README.md hf_space/README.md
+
+      - name: Install Hugging Face Hub client
+        run: pip install huggingface_hub
+
+      - name: Upload to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_ID: ${{ secrets.HF_SPACE_ID }}
+        run: |
+          python - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+
+          token = os.environ["HF_TOKEN"]
+          repo_id = os.environ["HF_SPACE_ID"]
+
+          HfApi(token=token).upload_folder(
+              folder_path="hf_space",
+              repo_id=repo_id,
+              repo_type="space",
+              commit_message="Deploy Docker Space from GitHub Actions",
+          )
+          PY

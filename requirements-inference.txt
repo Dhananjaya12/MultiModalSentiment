@@ -1,5 +1,11 @@
--r requirements.txt
+torch==2.7.0
+transformers==4.51.3
+numpy==2.4.3
+scipy==1.17.1
+scikit-learn==1.8.0
+h5py==3.11.0
 
+# App / inference
 gradio>=5.0
 openai-whisper
 open-clip-torch
@@ -7,3 +13,9 @@ opencv-python-headless
 librosa
 pillow
 pyngrok
+python-dotenv==1.2.2
+google-genai
+
+# Optional monitoring report
+evidently
+pandas

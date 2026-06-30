@@ -12,12 +12,35 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from inference.predictor import SentimentPredictor
 
+try:
+    from inference.gemini_predictor import GeminiFallbackPredictor
+except Exception as exc:
+    GeminiFallbackPredictor = None
+    print(f'Gemini fallback import unavailable: {exc}')
+
 MODEL_PATH = os.environ.get('MODEL_PATH', r'D:\data\multimodal\results\best_model.pt')
 CONFIG_PATH = os.environ.get('CONFIG_PATH', 'config.json')
+USE_GEMINI_FALLBACK = os.environ.get('USE_GEMINI_FALLBACK', 'true').lower() == 'true'
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
+GEMINI_CONFIDENCE_THRESHOLD = float(os.environ.get('GEMINI_CONFIDENCE_THRESHOLD', '0.55')) * 100.0
 
 print('Loading SentimentPredictor...')
 predictor = SentimentPredictor(model_path=MODEL_PATH, config_path=CONFIG_PATH)
 print('Predictor ready')
+
+gemini_predictor = None
+if USE_GEMINI_FALLBACK and GEMINI_API_KEY and GeminiFallbackPredictor is not None:
+    try:
+        gemini_predictor = GeminiFallbackPredictor(
+            api_key=GEMINI_API_KEY,
+            model_name=GEMINI_MODEL,
+        )
+        print(f'Gemini fallback ready: {GEMINI_MODEL}')
+    except Exception as exc:
+        print(f'Gemini fallback disabled: {exc}')
+elif USE_GEMINI_FALLBACK:
+    print('Gemini fallback disabled: GEMINI_API_KEY not set')
 
 
 CSS = """
@@ -95,9 +118,21 @@ CSS = """
 """
 
 
+def fallback_note_html(result: dict) -> str:
+    details = []
+    if result.get('reason'):
+        details.append(html.escape(str(result['reason'])))
+    if result.get('evidence'):
+        details.append(html.escape(str(result['evidence'])))
+    if not details:
+        return ''
+    return f'<div class="result-meta" style="margin-top:12px">{" ".join(details)}</div>'
+
+
 def result_html(result: dict) -> str:
     color = result['color']
     confidence = result['confidence']
+    source = html.escape(result.get('provider', 'custom_model').replace('_', ' ').title())
     return f"""
     <div class="result-card">
       <div class="result-row">
@@ -105,8 +140,10 @@ def result_html(result: dict) -> str:
         <div>
           <div class="result-label" style="color:{color}">{result['label']}</div>
           <div class="result-meta">Confidence: {confidence:.1f}%</div>
+          <div class="result-meta">Source: {source}</div>
         </div>
       </div>
+      {fallback_note_html(result)}
       <div class="confidence-track">
         <div class="confidence-fill" style="width:{confidence}%;background:{color}"></div>
       </div>
@@ -134,6 +171,24 @@ def toggle_text_input(media_path):
     )
 
 
+def should_use_gemini(result: dict) -> bool:
+    if gemini_predictor is None:
+        return False
+    if 'error' in result:
+        return True
+    return float(result.get('confidence', 100.0)) < GEMINI_CONFIDENCE_THRESHOLD
+
+
+def run_gemini_fallback(text: str = '', media_path: str | None = None) -> dict | None:
+    if gemini_predictor is None:
+        return None
+    fallback = gemini_predictor.predict(text=text, video_path=media_path)
+    if 'error' in fallback:
+        print(f"Gemini fallback failed: {fallback.get('message', 'unknown error')}", flush=True)
+        return None
+    return fallback
+
+
 def analyze(media_path, text, progress=gr.Progress()):
     started = time.perf_counter()
     text = (text or '').strip()
@@ -141,9 +196,22 @@ def analyze(media_path, text, progress=gr.Progress()):
     if media_path:
         progress(0.1, desc='Analyzing video')
         result = predictor.predict_from_video(str(media_path), mode='upload')
+        result.setdefault('provider', 'custom_model')
+        if should_use_gemini(result):
+            fallback = run_gemini_fallback(
+                text=result.get('transcript', ''),
+                media_path=str(media_path),
+            )
+            if fallback is not None:
+                result = fallback
     elif text:
         progress(0.2, desc='Analyzing text')
         result = predictor.predict_from_text(text)
+        result.setdefault('provider', 'custom_model')
+        if should_use_gemini(result):
+            fallback = run_gemini_fallback(text=text, media_path=None)
+            if fallback is not None:
+                result = fallback
     else:
         error = '<div class="error-card">Record or upload a video, or enter some text.</div>'
         return '', error
