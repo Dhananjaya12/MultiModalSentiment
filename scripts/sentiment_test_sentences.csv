@@ -1,0 +1,151 @@
+﻿id,expected_label,text
+pos_001,Positive,I am really happy with the service.
+pos_002,Positive,This product works perfectly for me.
+pos_003,Positive,I had a great experience today.
+pos_004,Positive,The support team was very helpful.
+pos_005,Positive,I love how easy this app is to use.
+pos_006,Positive,Everything went better than expected.
+pos_007,Positive,I am satisfied with the final result.
+pos_008,Positive,The video quality is amazing.
+pos_009,Positive,This made my day so much better.
+pos_010,Positive,I would definitely recommend this to others.
+pos_011,Positive,The delivery was faster than I expected.
+pos_012,Positive,The design looks clean and professional.
+pos_013,Positive,I feel confident using this tool.
+pos_014,Positive,The process was smooth from start to finish.
+pos_015,Positive,The team handled my request very well.
+pos_016,Positive,This feature saves me a lot of time.
+pos_017,Positive,I really appreciate the quick response.
+pos_018,Positive,The results are much better than before.
+pos_019,Positive,I enjoyed using this application.
+pos_020,Positive,The interface is simple and pleasant.
+pos_021,Positive,This is exactly what I needed.
+pos_022,Positive,The update improved the experience a lot.
+pos_023,Positive,I am impressed with the performance.
+pos_024,Positive,The instructions were clear and easy to follow.
+pos_025,Positive,The app loaded quickly and worked well.
+pos_026,Positive,I had no issues completing the task.
+pos_027,Positive,The customer service was excellent.
+pos_028,Positive,This solution is very useful.
+pos_029,Positive,I feel good about the outcome.
+pos_030,Positive,The quality exceeded my expectations.
+pos_031,Positive,The booking process was easy.
+pos_032,Positive,The payment went through without any problem.
+pos_033,Positive,The website is fast and reliable.
+pos_034,Positive,I am glad I chose this option.
+pos_035,Positive,This looks much better now.
+pos_036,Positive,The system responded quickly.
+pos_037,Positive,The final report was accurate and helpful.
+pos_038,Positive,I liked the way everything was organized.
+pos_039,Positive,The setup was quick and simple.
+pos_040,Positive,The experience felt smooth and stress-free.
+pos_041,Positive,I received exactly what I wanted.
+pos_042,Positive,The tool made my work easier.
+pos_043,Positive,The response was polite and professional.
+pos_044,Positive,The new version is a big improvement.
+pos_045,Positive,I am pleased with the overall experience.
+pos_046,Positive,The product feels reliable and well made.
+pos_047,Positive,The service was friendly and efficient.
+pos_048,Positive,This was a very helpful recommendation.
+pos_049,Positive,I would use this again.
+pos_050,Positive,Everything worked as expected and I am happy with it.
+neg_001,Negative,I am very disappointed with the service.
+neg_002,Negative,This product does not work properly.
+neg_003,Negative,I had a terrible experience today.
+neg_004,Negative,The support team was not helpful.
+neg_005,Negative,I hate how confusing this app is.
+neg_006,Negative,Everything went worse than expected.
+neg_007,Negative,I am unhappy with the final result.
+neg_008,Negative,The video quality is really bad.
+neg_009,Negative,This completely ruined my day.
+neg_010,Negative,I would not recommend this to anyone.
+neg_011,Negative,The delivery was much later than promised.
+neg_012,Negative,The design looks messy and unprofessional.
+neg_013,Negative,I do not feel confident using this tool.
+neg_014,Negative,The process was frustrating from start to finish.
+neg_015,Negative,The team handled my request poorly.
+neg_016,Negative,This feature wasted a lot of my time.
+neg_017,Negative,I am annoyed by the slow response.
+neg_018,Negative,The results are worse than before.
+neg_019,Negative,I did not enjoy using this application.
+neg_020,Negative,The interface is confusing and unpleasant.
+neg_021,Negative,This is not what I needed.
+neg_022,Negative,The update made the experience worse.
+neg_023,Negative,I am disappointed with the performance.
+neg_024,Negative,The instructions were unclear and hard to follow.
+neg_025,Negative,The app loaded slowly and kept freezing.
+neg_026,Negative,I had many issues completing the task.
+neg_027,Negative,The customer service was terrible.
+neg_028,Negative,This solution is not useful.
+neg_029,Negative,I feel bad about the outcome.
+neg_030,Negative,The quality was below my expectations.
+neg_031,Negative,The booking process was difficult.
+neg_032,Negative,The payment failed and caused problems.
+neg_033,Negative,The website is slow and unreliable.
+neg_034,Negative,I regret choosing this option.
+neg_035,Negative,This looks much worse now.
+neg_036,Negative,The system responded very slowly.
+neg_037,Negative,The final report was inaccurate and unhelpful.
+neg_038,Negative,I disliked the way everything was organized.
+neg_039,Negative,The setup was long and confusing.
+neg_040,Negative,The experience felt stressful and frustrating.
+neg_041,Negative,I did not receive what I wanted.
+neg_042,Negative,The tool made my work harder.
+neg_043,Negative,The response was rude and unprofessional.
+neg_044,Negative,The new version is a big downgrade.
+neg_045,Negative,I am unhappy with the overall experience.
+neg_046,Negative,The product feels unreliable and poorly made.
+neg_047,Negative,The service was unfriendly and inefficient.
+neg_048,Negative,This was a very poor recommendation.
+neg_049,Negative,I would not use this again.
+neg_050,Negative,Nothing worked as expected and I am upset about it.
+neu_001,Neutral,I received the product yesterday.
+neu_002,Neutral,The meeting starts at 3 PM.
+neu_003,Neutral,The app has three main features.
+neu_004,Neutral,I opened the website on my laptop.
+neu_005,Neutral,The order was delivered this morning.
+neu_006,Neutral,The video is two minutes long.
+neu_007,Neutral,The file was uploaded successfully.
+neu_008,Neutral,The customer submitted a request.
+neu_009,Neutral,The package is on the table.
+neu_010,Neutral,I checked the status of my account.
+neu_011,Neutral,The report contains five sections.
+neu_012,Neutral,The user logged in at noon.
+neu_013,Neutral,The device is connected to Wi-Fi.
+neu_014,Neutral,The form requires an email address.
+neu_015,Neutral,The system generated a confirmation number.
+neu_016,Neutral,The store opens at 9 AM.
+neu_017,Neutral,The document was saved in PDF format.
+neu_018,Neutral,The account settings were updated.
+neu_019,Neutral,The screen shows a list of options.
+neu_020,Neutral,The message was sent to the support team.
+neu_021,Neutral,The application is available on mobile devices.
+neu_022,Neutral,The ticket was created on Monday.
+neu_023,Neutral,The database contains customer records.
+neu_024,Neutral,The page includes a search bar.
+neu_025,Neutral,The invoice was downloaded successfully.
+neu_026,Neutral,The training session lasts one hour.
+neu_027,Neutral,The user selected the second option.
+neu_028,Neutral,The email includes an attachment.
+neu_029,Neutral,The product is available in three colors.
+neu_030,Neutral,The video was recorded in landscape mode.
+neu_031,Neutral,The request is waiting for approval.
+neu_032,Neutral,The dashboard shows monthly activity.
+neu_033,Neutral,The password was changed yesterday.
+neu_034,Neutral,The shipment is currently in transit.
+neu_035,Neutral,The table displays recent transactions.
+neu_036,Neutral,The user profile includes a phone number.
+neu_037,Neutral,The notification appeared on the screen.
+neu_038,Neutral,The file name was changed.
+neu_039,Neutral,The system is running version 2.1.
+neu_040,Neutral,The calendar shows the next appointment.
+neu_041,Neutral,The browser opened a new tab.
+neu_042,Neutral,The data was exported to a CSV file.
+neu_043,Neutral,The laptop is connected to a monitor.
+neu_044,Neutral,The form was submitted successfully.
+neu_045,Neutral,The address was added to the account.
+neu_046,Neutral,The application supports multiple languages.
+neu_047,Neutral,The settings menu is on the left side.
+neu_048,Neutral,The audio file is stored in the folder.
+neu_049,Neutral,The user entered the verification code.
+neu_050,Neutral,The session ended after thirty minutes.
